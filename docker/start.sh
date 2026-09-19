@@ -15,6 +15,8 @@ set -e
   done
   echo "[demo] IRIS 準備完了。初回初期化(IRISSECURITY 暗号化)を実行します..."
   bash /home/irisowner/dev/docker/first-boot-encrypt.sh
+  # 手順3(Wallet への API キー登録)は自動化しない。
+  # キーは環境変数/.env に出さず、手動で docker/register-key.sh を実行して登録する。
 ) &
 
 echo "[demo] Starting IRIS..."

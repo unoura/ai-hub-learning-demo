@@ -6,7 +6,8 @@ services:
     container_name: ai-hub-learning-demo
     restart: always
     env_file:
-      # OPENAI_API_KEY / ANTHROPIC_API_KEY を注入(手順3で使用)。
+      # ホスト公開ポート(HOST_SUPERSERVER_PORT / HOST_WEB_PORT)の上書き用。
+      # LLM API キーはここには注入しない(手順3で手動登録。docker/register-key.sh)。
       # 未作成でも起動できるよう required: false。`cp .env.example .env` で作成。
       - path: .env
         required: false
