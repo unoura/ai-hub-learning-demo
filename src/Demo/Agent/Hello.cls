@@ -1,19 +1,16 @@
 /// デモ用の最小エージェント(手順4)。
 ///
-/// 手順3で Secure Wallet に登録した OpenAI キーを、ソースには平文で持たず
-/// **ConfigStore の名前参照だけ**で使う。これが「Wallet → エージェント」の接続点。
+/// プロバイダは固定せず [[Demo.Agent.Base]] を継承する。手順3で Secure Wallet /
+/// ConfigStore に登録したキー(openai / anthropic / bedrock のどれでも)が
+/// `%OnInit()` で自動採用される。ソースには平文もプロバイダ名も持たない。
 ///
-///   PROVIDERCONFIG "@{config:AI.LLM.openai}"
-///     → %AI.Utils.SettingStore が ConfigStore(AI.LLM.openai)を展開
-///     → api_key の "secret://AISecrets.OpenAI#key" を Wallet で解決
+///   Base.%OnInit() が ConfigStore(AI.LLM.*)を優先順に探す
+///     → GetDetails(...,resolveSecrets=1) が Wallet の secret:// を解決
 ///     → 平文キーは %AI.Provider 生成時のメモリ上にだけ現れる
 ///
 /// 会話フロー: %New() → %Init() → CreateSession() → Chat(session,input)。
-Class Demo.Agent.Hello Extends %AI.Agent
+Class Demo.Agent.Hello Extends Demo.Agent.Base
 {
-
-/// キーは名前参照のみ(平文を書かない)。ConfigStore → Wallet と解決される。
-Parameter PROVIDERCONFIG = "@{config:AI.LLM.openai}";
 
 /// システムプロンプト。text/markdown として %LoadInstructions() が読み込む。
 XData INSTRUCTIONS [ MimeType = "text/markdown" ]

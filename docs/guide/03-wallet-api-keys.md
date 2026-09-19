@@ -1,7 +1,8 @@
-# 手順3: ウォレットで OpenAI / Claude のキーを受け渡す
+# 手順3: ウォレットで OpenAI / Claude / Bedrock のキーを受け渡す
 
-OpenAI と Claude(Anthropic)の API キーを IRIS の **Secure Wallet** に格納し、アプリからは
-**ConfigStore の参照(`@{config:...}`)だけ**で扱います。Wallet の実体は `IRISSECURITY`
+OpenAI・Claude(Anthropic)・Amazon Bedrock の API キー(Bedrock は bearer token)を
+IRIS の **Secure Wallet** に格納し、アプリからは
+**ConfigStore の参照だけ**で扱います。Wallet の実体は `IRISSECURITY`
 データベース(`^WALLET`)なので、手順2で暗号化済みのため、キーは**保存時(at-rest)で暗号化**
 されて保存されます。ソースコードや設定に平文の API キーは一切残りません。
 
@@ -30,15 +31,15 @@ OpenAI と Claude(Anthropic)の API キーを IRIS の **Secure Wallet** に格�
 ヘルパは以下を作成します(「無ければ作る」/ 既存キーは上書き)。
 
 1. RBAC リソース(`DemoWalletUse` / `DemoWalletEdit`)と Wallet コレクション `AISecrets`。
-2. API キーを Wallet に**オブジェクトで格納**(`AISecrets.OpenAI` / `AISecrets.Anthropic`、
-   `{"Secret":{"key":"sk-..."}}`)。
-3. ConfigStore に設定を作成(`AI.LLM.openai` / `AI.LLM.anthropic`)。ここには平文でなく
-   `"api_key":"secret://AISecrets.OpenAI#key"` という**参照だけ**を保持。
+2. API キーを Wallet に**オブジェクトで格納**(`AISecrets.OpenAI` / `AISecrets.Anthropic` /
+   `AISecrets.Bedrock`、`{"Secret":{"key":"..."}}`)。
+3. ConfigStore に設定を作成(`AI.LLM.openai` / `AI.LLM.anthropic` / `AI.LLM.bedrock`)。ここには
+   平文でなく `"api_key":"secret://AISecrets.OpenAI#key"` という**参照だけ**を保持。Bedrock は
+   非機密の `"region"` も同梱します(リージョンは秘密ではないので Wallet には入れません)。
 
 > **なぜ2層(Wallet + ConfigStore)か**: Wallet が機密の実体(暗号化 IRISSECURITY)、
 > ConfigStore は「どのプロバイダ・モデルで、キーはどの Wallet 参照か」という**設定と参照**を持ちます。
-> アプリ(手順4のエージェント)は `@{config:AI.LLM.openai}` と**名前で参照するだけ**で、
-> 平文キーには触れません。
+> アプリ(手順4のエージェント)は `AI.LLM.*` と**名前で参照するだけ**で、平文キーには触れません。
 
 ## 手順
 
@@ -50,6 +51,9 @@ docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh ope
 
 # Claude(Anthropic)キーを登録(モデルは任意。既定 claude-3-5-sonnet-latest)
 docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh anthropic
+
+# Amazon Bedrock(bearer token)を登録(リージョンも対話入力。既定 us-east-1)
+docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bedrock
 ```
 
 `Enter OpenAI API key (入力は表示されません):` と表示されたら、キーを貼り付けて Enter
@@ -60,9 +64,13 @@ docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh ant
 ```
 
 - `-it`(TTY)必須です。非表示入力のために対話端末が要ります。
-- 必要なプロバイダだけ登録すれば OK(片方だけでも可)。
+- **どれか1つ登録すれば OK**(手順4のエージェントは登録済みのものを自動採用します)。
 - 貼り付け時に**先頭1文字が欠ける**端末があります。`len=` が想定より短い/`sk-` 以外で
   始まる場合は再実行してください(上書き登録なのでやり直し自由)。
+- **Bedrock**: 認証は API キーでなく **bearer token**。モデルは**クロスリージョン推論プロファイル ID**
+  (既定 `us.anthropic.claude-sonnet-4-6` のように `us.` 等の接頭辞付き)を使う点に注意。
+  素のモデル ID だと `on-demand throughput isn't supported` になることがあります。
+  リージョン(既定 `us-east-1`)は秘密でないため ConfigStore に平文で入ります。
 
 > API キーは `.env` にも環境変数にも書きません。`.env.example` にキー欄はありません。
 

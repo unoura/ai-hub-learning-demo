@@ -40,8 +40,8 @@ API キーは **`.env` にも環境変数にも置かない**。対話ヘルパ 
 |---|---|---|
 | RBAC リソース | `Security.Resources`(`DemoWalletUse` / `DemoWalletEdit`) | コレクション作成に Use/Edit 指定は**必須**。ただし **KeyValue 型では実際には使われない**(下記参照) |
 | Wallet コレクション | `%Wallet.Collection`(`AISecrets`) | シークレットの束 |
-| Wallet シークレット | `%Wallet.KeyValue`(`AISecrets.OpenAI` / `AISecrets.Anthropic`) | API キーの実値。**オブジェクトで格納** `{"Secret":{"key":"sk-..."}}`。列挙不可、`GetSecretValue` で取得 |
-| ConfigStore 設定 | `%ConfigStore.Configuration`(`AI.LLM.openai` / `AI.LLM.anthropic`) | `model_provider` / `model` と **`api_key":"secret://AISecrets.OpenAI#key"`(参照だけ)** を保持。平文を持たない |
+| Wallet シークレット | `%Wallet.KeyValue`(`AISecrets.OpenAI` / `AISecrets.Anthropic` / `AISecrets.Bedrock`) | API キー/トークンの実値。**オブジェクトで格納** `{"Secret":{"key":"..."}}`。列挙不可、`GetSecretValue` で取得 |
+| ConfigStore 設定 | `%ConfigStore.Configuration`(`AI.LLM.openai` / `AI.LLM.anthropic` / `AI.LLM.bedrock`) | `model_provider` / `model` と **`api_key":"secret://AISecrets.OpenAI#key"`(参照だけ)** を保持。平文を持たない。Bedrock は非機密の `region` も同梱 |
 | 解決 | `%AI.Utils.SettingStore`(`Expand`) | `@{config:AI.LLM.openai}` → ConfigStore 展開 → `secret://` 解決 → 平文キー入り config。`%AI.Agent.%Init()` が `RegisterDefaults()` を呼ぶ |
 
 ### 読み取りの本当の関門は `%Admin_Wallet` リソース
@@ -77,8 +77,9 @@ Agent Parameter PROVIDERCONFIG = "@{config:AI.LLM.openai}"
 | 冪等性 | 土台(リソース/コレクション)は「無ければ作る」、シークレットは**上書き**(削除→再作成) | 再実行でキー差し替えが可能。土台は壊さない |
 | Secret の形 | オブジェクト `{"key":"..."}` | ConfigStore から `secret://...#key` でフィールド参照するため |
 | 設定の間接参照 | ConfigStore は `secret://` 参照だけ | 平文を設定・ソースに置かない(本手順の主目的) |
-| キー名 | `AISecrets.OpenAI` / `AISecrets.Anthropic`、config `AI.LLM.openai` / `AI.LLM.anthropic` | 手順4のプロバイダと 1:1、`@{config:AI.LLM.<name>}` で参照 |
-| モデル | ヘルパ第2引数(既定 `gpt-4o` / `claude-3-5-sonnet-latest`) | プロバイダの現行モデル ID に合わせて指定可能 |
+| キー名 | `AISecrets.<Name>`、config `AI.LLM.<provider>`(openai / anthropic / bedrock) | 手順4のプロバイダと 1:1。`Base.%OnInit()` が `AI.LLM.*` を優先順に探して採用 |
+| モデル | ヘルパ第2引数(既定 `gpt-4o` / `claude-3-5-sonnet-latest` / `us.anthropic.claude-sonnet-4-6`) | プロバイダの現行モデル ID に合わせて指定可能 |
+| Bedrock 認証 | bearer token を Wallet、`region` は非機密として ConfigStore に平文 | Bedrock は API キーでなく bearer token 認証。リージョンは秘密でない。model はクロスリージョン推論プロファイル ID(`us.` 等の接頭辞)が必要 |
 
 ## デモとしての簡易的措置 と 本番運用
 

@@ -7,27 +7,42 @@
 # 使い方(コンテナ内で対話実行):
 #   docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh openai
 #   docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh anthropic claude-3-5-sonnet-latest
+#   docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bedrock
+#
+# どれか1つ登録すればよい(エージェントは登録済みのものを自動採用する: Demo.Agent.Base)。
 #
 # 登録内容(正準パターン):
 #   - RBAC リソース DemoWalletUse / DemoWalletEdit と コレクション AISecrets(無ければ作成)
-#   - Wallet シークレット AISecrets.<Name> = {"Secret":{"key":"<入力キー>"}}
+#   - Wallet シークレット AISecrets.<Name> = {"Secret":{"key":"<入力キー / bearer token>"}}
 #   - ConfigStore 設定 AI.LLM.<provider> = {... "api_key":"secret://AISecrets.<Name>#key"}(参照だけ)
+#     bedrock は非機密の "region" も ConfigStore に同梱(リージョンは秘密ではないので Wallet には入れない)。
 # 既存は上書き登録(再実行で差し替え可能)。読み取りには %Admin_Wallet が必要(%SYS は %All 保有)。
 set -u
 
 prov="${1:-}"
+KeyLabel="API key"
 case "$prov" in
   openai)    Name="OpenAI";    defmodel="gpt-4o" ;;
   anthropic) Name="Anthropic"; defmodel="claude-3-5-sonnet-latest" ;;
-  *) echo "usage: $0 <openai|anthropic> [model]"; exit 1 ;;
+  # Bedrock は bearer token 認証。model はクロスリージョン推論プロファイル ID を既定にする。
+  bedrock)   Name="Bedrock";   defmodel="us.anthropic.claude-sonnet-4-6"; KeyLabel="bearer token" ;;
+  *) echo "usage: $0 <openai|anthropic|bedrock> [model]"; exit 1 ;;
 esac
 model="${2:-$defmodel}"
 
-# API キーを非表示で入力(argv・履歴に残らない)。
-printf 'Enter %s API key (入力は表示されません): ' "$Name" >&2
+# Bedrock はリージョン(非機密)も対話で入力(表示あり)。既定は us-east-1。
+region=""
+if [ "$prov" = "bedrock" ]; then
+  printf 'Enter AWS region [us-east-1]: ' >&2
+  read -r region
+  region="${region:-us-east-1}"
+fi
+
+# キー/トークンを非表示で入力(argv・履歴に残らない)。
+printf 'Enter %s %s (入力は表示されません): ' "$Name" "$KeyLabel" >&2
 read -r -s KEY
 echo >&2
-if [ -z "$KEY" ]; then echo "空のキーです。中止しました。" >&2; exit 1; fi
+if [ -z "$KEY" ]; then echo "空の値です。中止しました。" >&2; exit 1; fi
 
 # 0600 の一時ファイルへ書き出し(printf は組み込みなので argv に出ない)。値は改行なしで格納。
 tmp="$(mktemp /tmp/demo-key.XXXXXX)"
@@ -36,11 +51,11 @@ printf '%s' "$KEY" > "$tmp"
 unset KEY
 
 # 非シークレットのパラメータとファイルパスのみ環境変数で ObjectScript へ渡す(キー値は渡さない)。
-export DEMO_SID="AISecrets.${Name}" DEMO_CFG="${prov}" DEMO_PROV="${prov}" DEMO_MODEL="${model}" DEMO_KEYFILE="$tmp"
+export DEMO_SID="AISecrets.${Name}" DEMO_CFG="${prov}" DEMO_PROV="${prov}" DEMO_MODEL="${model}" DEMO_KEYFILE="$tmp" DEMO_REGION="$region"
 
 iris session IRIS -U %SYS <<'OBJSCRIPT'
  set sid=$system.Util.GetEnviron("DEMO_SID"),cfg=$system.Util.GetEnviron("DEMO_CFG")
- set prov=$system.Util.GetEnviron("DEMO_PROV"),model=$system.Util.GetEnviron("DEMO_MODEL"),kf=$system.Util.GetEnviron("DEMO_KEYFILE")
+ set prov=$system.Util.GetEnviron("DEMO_PROV"),model=$system.Util.GetEnviron("DEMO_MODEL"),kf=$system.Util.GetEnviron("DEMO_KEYFILE"),region=$system.Util.GetEnviron("DEMO_REGION")
  set s=##class(%Stream.FileCharacter).%New()  do s.LinkToFile(kf)  set k=s.Read(100000)
  do:'##class(Security.Resources).Exists("DemoWalletUse") ##class(Security.Resources).Create("DemoWalletUse","Demo wallet use resource","")
  do:'##class(Security.Resources).Exists("DemoWalletEdit") ##class(Security.Resources).Create("DemoWalletEdit","Demo wallet edit resource","")
@@ -48,10 +63,12 @@ iris session IRIS -U %SYS <<'OBJSCRIPT'
  do:##class(%Wallet.KeyValue).%ExistsId(sid) ##class(%Wallet.KeyValue).%DeleteId(sid)
  set sc=##class(%Wallet.KeyValue).Create(sid,{"Usage":"CUSTOM","Secret":{"key":(k)}})
  if 'sc { write "[wallet] Wallet 格納失敗: ",$system.Status.GetErrorText(sc),! halt }
+ set cfgObj={"model_provider":(prov),"model":(model),"api_key":("secret://"_sid_"#key")}
+ do:region'="" cfgObj.%Set("region",region)  // 非機密。bedrock のみ設定。
  do:##class(%ConfigStore.Configuration).Exists("AI.LLM."_cfg) ##class(%ConfigStore.Configuration).Delete("AI.LLM."_cfg)
- set sc=##class(%ConfigStore.Configuration).Create("AI","LLM","",cfg,{"model_provider":(prov),"model":(model),"api_key":("secret://"_sid_"#key")},"","","","",1,0)
+ set sc=##class(%ConfigStore.Configuration).Create("AI","LLM","",cfg,cfgObj,"","","","",1,0)
  if 'sc { write "[wallet] ConfigStore 作成失敗: ",$system.Status.GetErrorText(sc),! halt }
- write "[wallet] ",sid," / AI.LLM.",cfg," 登録完了 (model=",model,", len=",$length(k),")",!
+ write "[wallet] ",sid," / AI.LLM.",cfg," 登録完了 (model=",model,$select(region'="":", region="_region,1:""),", len=",$length(k),")",!
  halt
 OBJSCRIPT
 rc=$?
