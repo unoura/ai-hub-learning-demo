@@ -1,0 +1,5 @@
+fastmcp==3.2.4
+mcp==1.27.0
+pydantic==2.13.1
+pydantic-core==2.46.1
+typing-extensions==4.15.0

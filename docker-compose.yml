@@ -1,0 +1,21 @@
+services:
+  iris:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-hub-learning-demo
+    restart: always
+    env_file:
+      # OPENAI_API_KEY / ANTHROPIC_API_KEY を注入(手順3で使用)。
+      # 未作成でも起動できるよう required: false。`cp .env.example .env` で作成。
+      - path: .env
+        required: false
+    environment:
+      # コンテナ起動のたびに CPF マージを再適用
+      - ISC_CPF_MERGE_FILE=/home/irisowner/dev/merge.cpf
+    ports:
+      # ホスト側ポートは衝突しやすいので .env で上書き可能(既定値は非一般的な値)。
+      - ${HOST_SUPERSERVER_PORT:-51972}:1972    # スーパーサーバ(SQL / xDBC / VS Code / iris session)
+      - ${HOST_WEB_PORT:-51773}:52773           # 管理ポータル / Web アプリ
+    volumes:
+      - ./:/home/irisowner/dev

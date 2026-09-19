@@ -1,0 +1,25 @@
+    zn "%SYS"
+
+    // 開発用にパスワードを無期限化(パスワードレス運用)。
+    // ** 本番運用ではこの行をコメントアウトしてください **
+    do ##class(Security.Users).UnExpireUserPasswords("*")
+
+    // ZPM/IPM(パッケージマネージャ)のインストール
+    set r = ##class(%Net.HttpRequest).%New()
+    set r.Server = "pm.community.intersystems.com"
+    set r.SSLConfiguration = "ISC.FeatureTracker.SSL.Config"
+    do r.Get("/packages/zpm/latest/installer")
+    do $system.OBJ.LoadStream(r.HttpResponse.Data,"c")
+
+    // Embedded Python 用に Call-In サービスを有効化(merge.cpf 参照)
+    do ##class(Security.Services).Get("%Service_CallIn",.prop)
+    set prop("Enabled")=1
+    set prop("AutheEnabled")=48
+    do ##class(Security.Services).Modify("%Service_CallIn",.prop)
+
+    zpm "enable -community"
+
+    // DEMO 名前空間へ切り替え(以降の手順の作業領域)
+    zn "DEMO"
+
+    halt

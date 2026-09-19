@@ -1,0 +1,7 @@
+.git
+**/.DS_Store
+iris-main.log
+/local
+.env
+.env.*
+!.env.example

@@ -1,0 +1,9 @@
+[Actions]
+ModifyService:Name=%Service_CallIn,Enabled=1,AutheEnabled=48
+CreateResource:Name=%DB_DEMO_DATA,Description="DEMO_DATA database resource"
+CreateDatabase:Name=DEMO_DATA,Directory=/usr/irissys/mgr/DEMO_DATA,Resource=%DB_DEMO_DATA
+CreateResource:Name=%DB_DEMO_CODE,Description="DEMO_CODE database resource"
+CreateDatabase:Name=DEMO_CODE,Directory=/usr/irissys/mgr/DEMO_CODE,Resource=%DB_DEMO_CODE
+CreateNamespace:Name=DEMO,Globals=DEMO_DATA,Routines=DEMO_CODE,Interop=1
+[Startup]
+SystemMode=AI Hub EAP
