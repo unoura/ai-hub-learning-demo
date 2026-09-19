@@ -22,6 +22,10 @@ config_*.toml
 *.enc
 encryption*.key
 
+# iris-agentic-dev 接続先(ローカル環境固有・コミットしない)。サンプルは追跡する
+.iris-agentic-dev.toml
+!.iris-agentic-dev.toml.example
+
 # IRIS 実行ログ(bind-mount でリポジトリ直下に生成される)
 iris-main.log
 *.log

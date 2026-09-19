@@ -1,0 +1,30 @@
+# iris-agentic-dev workspace configuration (サンプル)
+#
+# ── iris-agentic-dev とは ────────────────────────────────────────────
+# InterSystems IRIS 開発者向けの CLI / MCP サーバ。Atelier REST API 経由で
+# IRIS を操作する。ObjectScript の実行(exec)・クラスの compile・SQL(query)・
+# クラスソースの読み書き(doc)などをコマンド一発で行える、AI エージェント開発の
+# 「ハーネス」。本デモではコンテナ内 IRIS への標準の作業手段として使う。
+#   インストール例(macOS): brew install iris-agentic-dev
+#   使用例: iris-agentic-dev exec -n DEMO 'write $zv'
+# このファイルは接続先(コンテナ名・名前空間など)を定義する設定ファイル。
+#
+# ── 使い方 ────────────────────────────────────────────────────────────
+# このファイルをコピーして `.iris-agentic-dev.toml` を作成してください:
+#   cp .iris-agentic-dev.toml.example .iris-agentic-dev.toml
+#
+# 実ファイル `.iris-agentic-dev.toml` は接続先(ローカル環境固有)のため gitignore 済み。
+# 資格情報は極力 IRIS_USERNAME / IRIS_PASSWORD 環境変数で渡し、ファイルに書かない。
+
+# ── Docker コンテナ経由(本デモの既定) ─────────────────────────────
+# Community イメージは Atelier REST を web ポート 52773 で提供する。
+# コンテナ名を指定すれば docker exec 経由で自動接続する。
+container = "ai-hub-learning-demo"
+
+# 既定の名前空間
+namespace = "DEMO"
+
+# 資格情報(任意)。デモ用の既知値は _SYSTEM / SYS。
+# 環境変数(IRIS_USERNAME / IRIS_PASSWORD)での指定を推奨。
+# username = "_SYSTEM"
+# password = "SYS"   # コミットするファイルには書かないこと
