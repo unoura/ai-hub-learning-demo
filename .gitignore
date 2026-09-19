@@ -1,0 +1,22 @@
+# ローカル環境専用(コミットしない)。聴衆に見せないものはここへ。
+/local/
+# ただし local/ の説明 README だけは追跡する
+!/local/
+/local/*
+!/local/README.md
+
+# シークレット・認証情報(コミット禁止)
+.env
+.env.*
+!.env.example
+*.key
+config.toml
+config_*.toml
+!config.toml.example
+
+# IRIS 暗号化キー
+*.enc
+encryption*.key
+
+# OS / エディタ
+.DS_Store
