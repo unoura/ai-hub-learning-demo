@@ -59,10 +59,10 @@ API キーは **`.env` にも環境変数にも置かない**。対話ヘルパ 
 ```
 Agent Parameter PROVIDERCONFIG = "@{config:AI.LLM.openai}"
   → SettingStore.Expand         : @{config:AI.LLM.openai} を ConfigStore 設定に展開
-  → ConfigStore 設定             : {"model_provider":"openai","model":"gpt-4o",
+  → ConfigStore 設定             : {"model_provider":"openai","model":"gpt-5.6",
                                     "api_key":"secret://AISecrets.OpenAI#key"}
   → secret:// 解決               : Wallet の AISecrets.OpenAI の "key" フィールドを取得
-  → 最終 config                  : {"model_provider":"openai","model":"gpt-4o",
+  → 最終 config                  : {"model_provider":"openai","model":"gpt-5.6",
                                     "api_key":"sk-..."}(ここで初めて平文)
   → %AI.Provider.Create(...)
 ```
@@ -78,7 +78,7 @@ Agent Parameter PROVIDERCONFIG = "@{config:AI.LLM.openai}"
 | Secret の形 | オブジェクト `{"key":"..."}` | ConfigStore から `secret://...#key` でフィールド参照するため |
 | 設定の間接参照 | ConfigStore は `secret://` 参照だけ | 平文を設定・ソースに置かない(本手順の主目的) |
 | キー名 | `AISecrets.<Name>`、config `AI.LLM.<provider>`(openai / anthropic / bedrock) | 手順4のプロバイダと 1:1。`Base.%OnInit()` が `AI.LLM.*` を優先順に探して採用 |
-| モデル | ヘルパ第2引数(既定 `gpt-4o` / `claude-3-5-sonnet-latest` / `us.anthropic.claude-sonnet-4-6`) | プロバイダの現行モデル ID に合わせて指定可能 |
+| モデル | ヘルパ第2引数(既定 `gpt-5.6` / `claude-sonnet-5` / `us.anthropic.claude-sonnet-5`) | プロバイダの現行モデル ID に合わせて指定可能。ID は変わりやすいので登録時に確認 |
 | Bedrock 認証 | bearer token を Wallet、`region` は非機密として ConfigStore に平文 | Bedrock は API キーでなく bearer token 認証。リージョンは秘密でない。model はクロスリージョン推論プロファイル ID(`us.` 等の接頭辞)が必要 |
 
 ## デモとしての簡易的措置 と 本番運用

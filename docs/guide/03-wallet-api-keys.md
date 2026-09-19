@@ -46,10 +46,10 @@ IRIS の **Secure Wallet** に格納し、アプリからは
 コンテナを起動しておき(手順1・2)、`docker compose exec -it` で**対話実行**します。
 
 ```bash
-# OpenAI キーを登録(モデルは任意。既定 gpt-4o)
+# OpenAI キーを登録(モデルは任意。既定 gpt-5.6)
 docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh openai
 
-# Claude(Anthropic)キーを登録(モデルは任意。既定 claude-3-5-sonnet-latest)
+# Claude(Anthropic)キーを登録(モデルは任意。既定 claude-sonnet-5)
 docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh anthropic
 
 # Amazon Bedrock(bearer token)を登録(リージョンも対話入力。既定 us-east-1)
@@ -60,7 +60,7 @@ docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bed
 (**入力は画面に出ません**)。成功すると次のように出ます:
 
 ```
-[wallet] AISecrets.OpenAI / AI.LLM.openai 登録完了 (model=gpt-4o, len=164)
+[wallet] AISecrets.OpenAI / AI.LLM.openai 登録完了 (model=gpt-5.6, len=164)
 ```
 
 - `-it`(TTY)必須です。非表示入力のために対話端末が要ります。
@@ -68,7 +68,7 @@ docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bed
 - 貼り付け時に**先頭1文字が欠ける**端末があります。`len=` が想定より短い/`sk-` 以外で
   始まる場合は再実行してください(上書き登録なのでやり直し自由)。
 - **Bedrock**: 認証は API キーでなく **bearer token**。モデルは**クロスリージョン推論プロファイル ID**
-  (既定 `us.anthropic.claude-sonnet-4-6` のように `us.` 等の接頭辞付き)を使う点に注意。
+  (既定 `us.anthropic.claude-sonnet-5` のように `us.` 等の接頭辞付き)を使う点に注意。
   素のモデル ID だと `on-demand throughput isn't supported` になることがあります。
   リージョン(既定 `us-east-1`)は秘密でないため ConfigStore に平文で入ります。
 

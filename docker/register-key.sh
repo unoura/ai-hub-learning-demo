@@ -6,7 +6,7 @@
 #
 # 使い方(コンテナ内で対話実行):
 #   docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh openai
-#   docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh anthropic claude-3-5-sonnet-latest
+#   docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh anthropic claude-sonnet-5
 #   docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bedrock
 #
 # どれか1つ登録すればよい(エージェントは登録済みのものを自動採用する: Demo.Agent.Base)。
@@ -22,10 +22,10 @@ set -u
 prov="${1:-}"
 KeyLabel="API key"
 case "$prov" in
-  openai)    Name="OpenAI";    defmodel="gpt-4o" ;;
-  anthropic) Name="Anthropic"; defmodel="claude-3-5-sonnet-latest" ;;
+  openai)    Name="OpenAI";    defmodel="gpt-5.6" ;;
+  anthropic) Name="Anthropic"; defmodel="claude-sonnet-5" ;;
   # Bedrock は bearer token 認証。model はクロスリージョン推論プロファイル ID を既定にする。
-  bedrock)   Name="Bedrock";   defmodel="us.anthropic.claude-sonnet-4-6"; KeyLabel="bearer token" ;;
+  bedrock)   Name="Bedrock";   defmodel="us.anthropic.claude-sonnet-5"; KeyLabel="bearer token" ;;
   *) echo "usage: $0 <openai|anthropic|bedrock> [model]"; exit 1 ;;
 esac
 model="${2:-$defmodel}"
