@@ -15,6 +15,13 @@ ENV PYTHON_PATH=/usr/irissys/bin/
 ENV PYTHONPATH="/usr/irissys/lib/python"
 ENV PATH "/usr/irissys/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/irisowner/bin"
 
+## Durable %SYS 用マウントポイントを IRIS 実行ユーザ所有で作成。
+## 空の名前付きボリュームはこのディレクトリの所有権を引き継ぐため、iscdata を作成できる。
+## ユーザ/グループはハードコードせず ISC_PACKAGE_* 変数で参照(参照リポジトリと同じ idiom)。
+USER root
+RUN mkdir -p /durable && chown -R ${ISC_PACKAGE_MGRUSER}:${ISC_PACKAGE_IRISGROUP} /durable
+USER ${ISC_PACKAGE_MGRUSER}
+
 COPY requirements.txt /home/irisowner/dev/requirements.txt
 COPY merge.cpf /home/irisowner/dev/merge.cpf
 
