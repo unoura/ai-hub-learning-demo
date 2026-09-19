@@ -23,6 +23,11 @@ services:
       - ./:/home/irisowner/dev
       # Durable %SYS の永続ボリューム(再作成・down/up でもデータ保持)
       - iris-durable:/durable
+    # エントリーポイント: IRIS 起動を待って初回初期化(IRISSECURITY 暗号化)を実行し、
+    # 前景では tini 経由で本来の /iris-main を exec する(docker/start.sh 参照)。
+    entrypoint:
+      - /bin/bash
+      - /home/irisowner/dev/docker/start.sh
 
 volumes:
   iris-durable:
