@@ -12,14 +12,19 @@
 手順2で IRISSECURITY データベースを暗号化することにより、手順3で Wallet に格納する API キーが
 **保存時(at-rest)で保護**される、という一貫したストーリーになっています。
 
-## ドキュメント一覧
+## ドキュメント構成
 
-| # | ドキュメント | 内容 |
-|---|---|---|
-| 1 | [docs/01-docker-environment.md](docs/01-docker-environment.md) | Docker で動作する IRIS 環境を作る |
-| 2 | [docs/02-irissecurity-encryption.md](docs/02-irissecurity-encryption.md) | IRISSECURITY データベースを暗号化する |
-| 3 | [docs/03-wallet-api-keys.md](docs/03-wallet-api-keys.md) | Wallet で OpenAI / Claude のキーを受け渡す |
-| 4 | [docs/04-agent-hello-world.md](docs/04-agent-hello-world.md) | エージェントで Hello World を作成する |
+ドキュメントは目的別に分けています。
+
+- **[docs/guide/](docs/guide/)** — 聴衆向け。完成した手順と説明。まずはここから。
+- **[docs/design/](docs/design/)** — 設計・判断根拠。なぜその構成にしたか。
+
+| # | 手順 | ガイド | 設計 |
+|---|---|---|---|
+| 1 | Docker で動作する IRIS 環境 | [guide](docs/guide/01-docker-environment.md) | [design](docs/design/01-docker-environment.md) |
+| 2 | IRISSECURITY の暗号化 | [guide](docs/guide/02-irissecurity-encryption.md) | [design](docs/design/02-irissecurity-encryption.md) |
+| 3 | Wallet で OpenAI / Claude のキー受け渡し | [guide](docs/guide/03-wallet-api-keys.md) | [design](docs/design/03-wallet-api-keys.md) |
+| 4 | エージェントで Hello World | [guide](docs/guide/04-agent-hello-world.md) | [design](docs/design/04-agent-hello-world.md) |
 
 ## 技術スタックの前提
 
@@ -27,5 +32,12 @@
 - AI Hub SDK: `%AI.*`(`%AI.Tool` → `%AI.ToolSet` → `%AI.Agent` / `%AI.MCP.Service`)
 - LLM プロバイダ: OpenAI / Anthropic(Claude)の両対応
 
-> **ステータス:** 各ドキュメントには現在「方針(確定済み)」を記載しています。実装の進行に合わせて、
-> 具体的な手順・コマンド・確認結果を追記していきます。
+## クイックスタート
+
+```bash
+cp .env.example .env          # 任意(API キーを使う場合)
+docker compose up -d --build  # ビルド & 起動
+docker compose exec -it iris iris session iris -U DEMO
+```
+
+詳細は [docs/guide/01-docker-environment.md](docs/guide/01-docker-environment.md) を参照。
