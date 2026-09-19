@@ -23,6 +23,16 @@
   - `iris.script` — ZPM/IPM 導入、開発用のパスワード無期限化など
   - `module.xml` — `zpm load` でサンプルクラスを取り込み
 - **シークレット注入**: `docker-compose.yml` の `env_file: .env` から `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
+- **Durable %SYS**: システムデータ(`IRISSECURITY` 含む)を名前付きボリューム `iris-durable` に永続化。
+  - `ISC_DATA_DIRECTORY=/durable/iscdata` を指定し、`iris-durable:/durable` をマウント。
+  - マウントポイント `/durable` は Dockerfile で **IRIS 実行ユーザ所有**として作成する(空の名前付きボリュームがこの所有権を引き継ぎ、`iscdata` を作成できる)。所有権を設定しないと `ERROR #5001: Cannot create target: /durable/iscdata/` で起動失敗する。
+  - ユーザ/グループはハードコードせず `${ISC_PACKAGE_MGRUSER}:${ISC_PACKAGE_IRISGROUP}` 変数で参照する(参照リポジトリと同じ idiom。移植性が高い):
+    ```dockerfile
+    USER root
+    RUN mkdir -p /durable && chown -R ${ISC_PACKAGE_MGRUSER}:${ISC_PACKAGE_IRISGROUP} /durable
+    USER ${ISC_PACKAGE_MGRUSER}
+    ```
+  - 手順2の暗号化設定が `down`/`up` 後も残るため重要。
 
 ## 作成したファイル
 
@@ -52,6 +62,11 @@ docker compose up -d --build
 > **前提**: ベースイメージ(iris-community AI Hub EAP)がローカルに `docker load` 済みであること。
 > イメージ名が異なる場合は `Dockerfile` の `ARG IMAGE` を書き換える。
 
+> **注意(Durable %SYS の再プロビジョニング)**: durable ボリュームが既に存在すると、初回起動時のコピーが
+> 走らないため、イメージを再ビルドしても `iris.script` の**ビルド時設定は反映されない**(`merge.cpf` の
+> 名前空間/DB 作成は起動毎の再マージで冪等に適用される)。ビルド時設定をやり直したい場合は
+> `docker compose down -v` でボリュームごと削除してから `up --build` する。
+
 ## 確認方法
 
 ```bash
@@ -75,6 +90,8 @@ docker compose exec -it iris iris session iris -U DEMO
 | `%AI.Agent`(手順4用) | 存在 | ✓ |
 | `%Wallet.Collection`(手順3用) | 存在 | ✓ |
 | ポートマッピング | `51972→1972` / `51773→52773` | ✓ |
+| Durable %SYS | mgr が `/durable/iscdata/mgr/` | ✓ |
+| 永続性 | `down`/`up` 後もグローバル/データ保持 | ✓ |
 
 > 使用イメージ: `docker.iscinternal.com/docker-intersystems/intersystems/iris-community:2026.3.0AI.136.0`
 > (arm64 版を `docker load` 済み。`Dockerfile` の `ARG IMAGE` と一致)

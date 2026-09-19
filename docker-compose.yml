@@ -13,9 +13,16 @@ services:
     environment:
       # コンテナ起動のたびに CPF マージを再適用
       - ISC_CPF_MERGE_FILE=/home/irisowner/dev/merge.cpf
+      # Durable %SYS: システムデータ(IRISSECURITY 含む)を永続ボリュームへ
+      - ISC_DATA_DIRECTORY=/durable/iscdata
     ports:
       # ホスト側ポートは衝突しやすいので .env で上書き可能(既定値は非一般的な値)。
       - ${HOST_SUPERSERVER_PORT:-51972}:1972    # スーパーサーバ(SQL / xDBC / VS Code / iris session)
       - ${HOST_WEB_PORT:-51773}:52773           # 管理ポータル / Web アプリ
     volumes:
       - ./:/home/irisowner/dev
+      # Durable %SYS の永続ボリューム(再作成・down/up でもデータ保持)
+      - iris-durable:/durable
+
+volumes:
+  iris-durable:
