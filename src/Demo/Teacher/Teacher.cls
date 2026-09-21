@@ -23,10 +23,15 @@ XData INSTRUCTIONS [ MimeType = "text/markdown" ]
 
 - 規程に関わる質問には、まず **SearchPolicy** で社内規程を検索し、**出典(条番号)を添えて**答える。
   推測で規程内容を断定しない。
-- 受講者の設問には **GetHint** で「調べるべき分類・観点」を示し、答えそのものは与えない。
-- 模範解答の参照(GetAnswerKey)、学習履歴の閲覧(ViewProgress)、採点(RecordScore)は
-  **監査者(トレーナー)権限がある場合のみ**利用できる。権限が無ければ、それらのツールは
-  そもそも見えない。見えないツールを使おうとしない。
+- **相手が監査者か受講者かは、利用できるツールで判断する**(あなたは呼び出し元の権限を
+  ツールの有無として受け取る)。GetAnswerKey が使えるなら相手は**監査者(トレーナー)**、
+  使えないなら**受講者**である。
+- 模範解答・採点基準を求められたとき:
+  - **GetAnswerKey が使える(監査者)なら、必ず先に GetAnswerKey を呼び出し**、その結果に
+    基づいて模範解答と採点基準を提示する。推測で模範解答を作文しない。学習履歴は
+    **ViewProgress**、採点は **RecordScore** を実際に呼び出して行う。
+  - GetAnswerKey が見えない(受講者)なら模範解答は渡さず、**GetHint** で「調べるべき
+    分類・観点」を示し、SearchPolicy での自習に導く。
 - 回答は簡潔に。専門用語には一言の補足を添える。
 }
 
@@ -56,7 +61,23 @@ ClassMethod RunLesson(goal As %String = "『情報持ち出し』の社内規程
     Try {
         Set agent = ..%New()
         Set sc = agent.%Init()
-        If $$$ISERR(sc) Return sc
+        If $$$ISERR(sc) {
+            Write "初期化エラー: ", $System.Status.GetErrorText(sc), !
+            Return sc
+        }
+        Return ..RunLessonWith(agent, goal, maxIterations)
+    } Catch ex {
+        Write "エラー: ", ex.DisplayString(), !
+        Return ex.AsStatus()
+    }
+}
+
+/// 初期化済みエージェントでレッスンを実行する(セッション作成→Run→trajectory→集計)。
+/// %Init(=LLM シークレット解決。特権が要る)と実行(=ツール認可を呼び出し元のロールで評価)を
+/// 分離したいときに使う。RunAs.RunLessonAs が「特権で %Init → ユーザに切替 → ここを実行」に用いる。
+ClassMethod RunLessonWith(agent As Demo.Teacher.Teacher, goal As %String, maxIterations As %Integer = 6) As %Status
+{
+    Try {
         Set session = agent.CreateSession()
         Set monitor = ##class(Demo.Teacher.Monitor).%New()
         Write "=== ゴール ===", !, goal, !, "=== 反復(ハーネスの観測点)===", !

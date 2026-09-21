@@ -71,12 +71,16 @@ ClassMethod SetupRBAC(pwd As %String = "SecDemo!2026") As %Status
 /// 権限の層は <class>Demo.Teacher.RoleGuard</class>(ツールの可視性/実行)と揃え、SQL レベルでも
 /// 受講者が模範解答・進捗を読めないようにする(多層防御)。
 ///
-/// 注: ベクトル索引 <class>Demo_Teacher.PolicyVec</class> は Setup.BuildIndex で作られるため、ここでは対象外。
-/// エージェントを受講者 identity で走らせて SearchPolicy まで実行したい場合は、別途 SELECT を付与する。
+/// 注: 規程検索(SearchPolicy)が読むベクトル索引 <class>Demo_Teacher.PolicyVec</class> は
+/// 「誰でも検索可」の土台なので、共有ロール Demo_Runtime に SELECT を付ける。
+/// 模範解答・採点の権限差は、あくまで AnswerKey/Progress 側の GRANT で表す。
 ClassMethod GrantSql() As %Status
 {
     New $Namespace
     Set $Namespace = "DEMO"
+    // 実行基盤(誰でも): 規程検索のためのベクトル索引の参照。
+    Do ..Grant("SELECT ON Demo_Teacher.PolicyVec TO Demo_Runtime")
+    Do ..Grant("SELECT ON Demo_Teacher.PolicyVec_Config TO Demo_Runtime")
     // 受講者: 教材(規程・設問)の参照のみ。
     Do ..Grant("SELECT ON Demo_Teacher.Policy TO Demo_Learner")
     Do ..Grant("SELECT ON Demo_Teacher.Question TO Demo_Learner")

@@ -133,6 +133,76 @@ ClassMethod TryTool(mgr As %AI.ToolMgr, name As %String, args As %DynamicObject)
     }
 }
 
+/// 指定ユーザの identity で先生エージェントの会話(RunLesson)を丸ごと実行する。
+/// 同じゴールを learner01(生徒)/ auditor01(先生=監査者)で投げると、呼べるツールが
+/// 権限で変わる様子が trajectory に出る(生徒は GetAnswerKey が見えない、等)。
+///
+///   >>> do ##class(Demo.Teacher.RunAs).RunLessonAs("auditor01", "この設問の模範解答を教えて")
+///   >>> do ##class(Demo.Teacher.RunAs).RunLessonAs("learner01", "情報持ち出しの社内規程を出典付きで教えて")
+ClassMethod RunLessonAs(username As %String, goal As %String = "『情報持ち出し』の社内規程を調べて、出典付きで要点を教えて", pwd As %String = "SecDemo!2026") As %Status
+{
+    Set outfile = "/tmp/runas_lesson_" _ username _ ".txt"
+    Do ##class(%File).Delete(outfile)
+    Write "=== ", username, " として先生エージェントを実行 ===", !
+    Job ##class(Demo.Teacher.RunAs).LessonChild(username, pwd, goal, outfile)
+    // LLM 応答を待つので長め(最大 ~90 秒)。子は完了時に .part → 本ファイルへリネームする。
+    For i = 1:1:900 {
+        Quit:##class(%File).Exists(outfile)
+        Hang 0.1
+    }
+    If '##class(%File).Exists(outfile) {
+        Write "(タイムアウト。子プロセスが応答しません)", !
+        Return $$$OK
+    }
+    Do ..Emit(..ReadFile(outfile))
+    Return $$$OK
+}
+
+/// 子プロセス:先生エージェントの会話を実行し、その出力を一時ファイルへ捕捉する。
+///
+/// LLM シークレットの解決には %DB_IRISSECURITY(ロールに付与不可)相当の特権が要るため、
+/// 「特権のうちに %Init でシークレットをメモリへ解決 → デモユーザに Login → 会話を実行」
+/// の順で行う。以降のツール認可(RoleGuard)と教材 SQL は、切替後のデモユーザのロールで評価される。
+/// 完了時のみ本ファイルへリネームし、親が「途中の空ファイル」を読むのを防ぐ。
+ClassMethod LessonChild(username As %String, pwd As %String, goal As %String, outfile As %String)
+{
+    Set tmp = outfile _ ".part"
+    Do ##class(%File).Delete(tmp)
+    // 1) 特権のうちに初期化(LLM シークレットをメモリ上の Provider へ解決)。
+    Set agent = ##class(Demo.Teacher.Teacher).%New()
+    Set sc = agent.%Init()
+    If $$$ISERR(sc) {
+        Do ..WriteFile(outfile, "初期化エラー: " _ $System.Status.GetErrorText(sc))
+        Quit
+    }
+    // 2) デモユーザへ切替(不可逆)。以降のツール可視性/実行・教材 SQL はこのロールで判定。
+    If '$SYSTEM.Security.Login(username, pwd) {
+        Do ..WriteFile(outfile, "ログイン失敗: " _ username)
+        Quit
+    }
+    Set io = $IO
+    Try {
+        // UTF-8 で書く(K\UTF8\)。既定変換だと日本語が ? に落ちる。
+        Open tmp:("WNSK\UTF8\"):5
+        Use tmp
+        Write "[identity] user=", $Username, "  roles=", $Roles, !!
+        Do ##class(Demo.Teacher.Teacher).RunLessonWith(agent, goal)
+    } Catch ex {
+        Write !, "子プロセス例外: ", ex.DisplayString(), !
+    }
+    Use io
+    Close tmp
+    Do ##class(%File).Rename(tmp, outfile)
+}
+
+/// 捕捉した出力を親の端末へ書き出す。改行を CRLF に正規化(TTY で段組みがずれないように)。
+ClassMethod Emit(text As %String) [ Private ]
+{
+    Set text = $Replace(text, $Char(13, 10), $Char(10))
+    Set text = $Replace(text, $Char(10), $Char(13, 10))
+    Write text, !
+}
+
 /// 子プロセス:デモユーザにログインしてツール名をディスカバリし、JSON をファイルに書く。
 ClassMethod Child(username As %String, pwd As %String, outfile As %String)
 {
@@ -165,20 +235,22 @@ ClassMethod DiscoverToolNames() As %DynamicArray
     Return names
 }
 
-/// ファイル全体を文字列で読む。
+/// ファイル全体を文字列で読む(UTF-8。子プロセスの日本語出力を保持するため)。
 ClassMethod ReadFile(path As %String) As %String [ Private ]
 {
     Set f = ##class(%Stream.FileCharacter).%New()
+    Set f.TranslateTable = "UTF8"
     Set f.Filename = path
     Set s = ""
     While 'f.AtEnd { Set s = s _ f.Read(32000) }
     Return s
 }
 
-/// 文字列をファイルへ書く。
+/// 文字列をファイルへ書く(UTF-8。ReadFile と対で日本語を保持)。
 ClassMethod WriteFile(path As %String, content As %String) [ Private ]
 {
     Set f = ##class(%Stream.FileCharacter).%New()
+    Set f.TranslateTable = "UTF8"
     Set f.Filename = path
     Do f.Write(content)
     Do f.%Save()
