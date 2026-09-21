@@ -156,27 +156,49 @@ Class Demo.Trajectory.Monitor Extends %RegisteredObject
 
   | 採用 | クラス | 次元 | キー | 備考 |
   |---|---|---|---|---|
-  | **FastEmbed(固定)** | `%AI.RAG.Embedding.FastEmbed.Create()` | 384(`AllMiniLML6V2`) | 不要(ローカル ONNX) | HF モデルのキャッシュが要る(`FASTEMBED_CACHE_DIR`)。`EmbedBatch()` を ObjectScript から直呼びすると例外 → 検索は `ToolMgr.ExecuteTool(kb.Name,{"query":...})` 経由で行う |
+  | **FastEmbed(固定)** | `%AI.RAG.Embedding.FastEmbed.Create()` | 384(`AllMiniLML6V2`) | 不要(ローカル ONNX) | `AddDocument()` は ObjectScript から動く(検索は `ToolMgr.ExecuteTool(kb.Name,{"query":...})` 経由)。実機ではモデルは既にキャッシュ済みで `FASTEMBED_CACHE_DIR` 未設定でも動作 |
+
+  > **日本語品質の限界(実機で確認 2026-09-21)**: この build の FastEmbed は英語モデル `AllMiniLML6V2` に
+  > **ハードコード**(`%OnInit` の `$ZF(-6,...,CREATEFASTEMBED)` はモデル引数を取らず、`ModelName`/`Dimensions` は
+  > パラメータ固定・Setter なし=多言語モデルへ差し替える口がない)。そのため日本語の意味検索は不正確で、
+  > 語彙一致が強い質問(「パスワードは何文字」「不審メール」)は正答するが、意味理解が要る質問
+  > (「端末を紛失→インシデント報告」「贈答→コンプライアンス」)では誤った規程を返す(実測 4問中2問ミス)。
+  > **分類名+同義キーワードでの本文補強では改善しない**(トークナイザ由来の限界。むしろ汎用語が
+  > アトラクタ化して悪化した)。ユーザ確定(2026-09-21)により **FastEmbed のまま**とし、デモは検索が
+  > 確実に効く質問に寄せ、この弱点は正直に説明する。本番で日本語品質が要るなら下記 OpenAI 埋め込み等に切替。
 
   > 参考(不採用): `%AI.RAG.Embedding.OpenAI.Create(provider,"text-embedding-3-small",1536)` は Wallet 構成要素の
-  > Wallet を再利用できるが openai 登録時のみ成立するため、プロバイダ非依存を優先して見送り。本番で
-  > 高次元・別モデルが要る場合の選択肢として残す。
+  > キーを埋め込みでも再利用でき日本語に強い。ただし (1) openai 登録時のみ成立(プロバイダ非依存でない)、
+  > (2) このデモのアカウントは**リージョン制限**があり provider に `sg.api.openai.com` の base URL 設定が別途必要
+  > (未設定だと `incorrect_hostname` エラー)。本番で高次元・別モデル・日本語品質が要る場合の選択肢として残す。
 
-- 構築フロー(`ai-hub-dev-template/skills/ai-hub-rag`):
-  `%AI.RAG.VectorStore.IRIS`(`.TableName` / `.Dimensions` / `.ModelName`、`Build()`)
-  → `%AI.RAG.KnowledgeBase`(`.Name` が**ツール名**になる、`.TopK`、`Build(emb, vs)`、`AddDocument()`)
-  → `kb.AddToAgent(agent)` でエージェントに検索ツールとして生える。
+- 構築フロー(実装 `Demo.Teacher.Setup`。`ai-hub-dev-template/skills/ai-hub-rag` を踏襲):
+  `%AI.RAG.VectorStore.IRIS`(`.TableName` は **`Schema.Table` 形式=ドット1つ**。`Demo_Teacher.PolicyVec`。
+  `.Dimensions` / `.ModelName`、`Build()`)
+  → `%AI.RAG.KnowledgeBase`(`.Name` が**ツール名**=`SearchPolicy`、`.Description` **必須**、`.TopK`、`Build(emb, vs)`、`AddDocument(text, meta)`)
+  → 検索/ツール登録は `kb.AddToManager(mgr)` または `kb.AddToAgent(agent)`。
+  ベクトルは Policy 表とは別の `Demo_Teacher.PolicyVec` に永続化され、**別プロセスから再埋め込みなしで検索できる**(実証済み)。
 - **データ層の二重ガード**: 模範解答/評価基準は教材 KB とは**別テーブル/別 KB**にし、受講者ツールの
   検索スコープから外す。権限(①)× データ分離で、たとえツールが呼べても中身が出ない構造にする。
 
-## データモデル(案)
+## データモデル(実装済み: Policy / Question / AnswerKey)
 
-| 物 | テーブル/格納先 | 可視性 | 保護 |
-|---|---|---|---|
-| 社内ポリシー本文(教材) | `Demo.Policy(id, section, title, body, embedding VECTOR(DOUBLE,384))` | 全員 | DEMO_DATA |
-| 練習問題 | `Demo.Question(id, topic, prompt)` | 全員 | DEMO_DATA |
-| 模範解答・評価基準 | `Demo.AnswerKey(qid, model_answer, rubric)` | 監査のみ | DEMO_DATA(+ ツール権限) |
-| 受講者スコア(個人情報) | `Demo.Progress(learner, qid, score, ts)` | 監査のみ | DEMO_DATA(+ ツール権限) |
+> **命名の是正**: 当初案の `Demo.Policy` はデータ表と権限クラス `Demo.Policy.RoleGuard` で同名衝突する
+> (同名のクラスとパッケージは共存不可)。教材データもポリシー/監視クラスも **`Demo.Teacher.*` パッケージ**に
+> 収める。SQL スキーマはパッケージ由来で `Demo_Teacher`(例: `Demo_Teacher.Policy`)。
+
+| 物 | クラス/格納先 | 可視性 | 保護 | 状態 |
+|---|---|---|---|---|
+| 社内ポリシー本文(教材) | `Demo.Teacher.Policy(Category, Title, Body, Source)` | 全員 | DEMO_DATA | ✅ 実装・投入(10件) |
+| 練習問題 | `Demo.Teacher.Question(Category, Prompt, Difficulty)` | 全員 | DEMO_DATA | ✅ 実装・投入(4件) |
+| 模範解答・評価基準 | `Demo.Teacher.AnswerKey(Question→, ModelAnswer, Rubric)` | 監査のみ | DEMO_DATA(+ ツール権限) | ✅ 実装・投入(4件) |
+| ベクトルインデックス | `Demo_Teacher.PolicyVec`(VectorStore.IRIS が生成、384次元) | — | DEMO_DATA | ✅ `Demo.Teacher.Setup` が構築 |
+| 受講者スコア(個人情報) | `Demo.Teacher.Progress(Learner, Question→, Score, Ts)` | 監査のみ | DEMO_DATA(+ ツール権限) | ⏳ 次フェーズ(RecordScore が書く実行時状態) |
+
+- 埋め込みは Policy 列には持たせず、KB の VectorStore テーブル `Demo_Teacher.PolicyVec` に分離
+  (原本=`Demo.Teacher.Policy` / 検索索引=`PolicyVec` を分けることで再インデックスや原本編集がしやすい)。
+- セットアップは手動: `do ##class(Demo.Teacher.Setup).Rebuild()`(冪等な全再構築)。
+  起動時に FastEmbed を毎回走らせないため、ボット起動時ロード(`$system.OBJ.LoadDir`)はクラスの読込のみ。
 
 ## 既存デモとの接続
 
@@ -211,6 +233,10 @@ Class Demo.Trajectory.Monitor Extends %RegisteredObject
 
 ## 確定事項(ユーザ確定 2026-09-21)
 
-1. 埋め込み = **FastEmbed 固定**(384次元・キー不要・プロバイダ非依存)。
-2. identity 切替 = **JOB 子 + `$SYSTEM.Security.Login` の RunAs 方式**。
-3. 実装フェーズ(`guide/agents/teacher-agent.md` + エージェント/ツール/ポリシー/KB/RunAs/教材データ)へ進むかは**次のコメント待ち**。
+1. 題材 = **情報セキュリティ・コンプライアンス研修**のまま(社内ポリシー全般へ広げず)。
+2. 埋め込み = **FastEmbed 固定**(384次元・キー不要・プロバイダ非依存)。日本語品質の限界は上記のとおり
+   把握済みで、承知の上で FastEmbed のまま採用(デモは検索が効く質問に寄せ、弱点は正直に説明)。
+3. identity 切替 = **JOB 子 + `$SYSTEM.Security.Login` の RunAs 方式**。
+4. 実装は段階的に進める。**第1段(教材データ + ベクトル検索)は完了**(`Demo.Teacher.Policy/Question/AnswerKey/Setup`、
+   `Demo_Teacher.PolicyVec`、SearchPolicy 検索の実機確認)。次段は権限制御・ツール群・trajectory・RunAs。
+   `guide/agents/teacher-agent.md`(聴衆向け)は全体が固まってから執筆。
