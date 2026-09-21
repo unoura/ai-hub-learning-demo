@@ -63,7 +63,9 @@ ClassMethod RunLesson(goal As %String = "『情報持ち出し』の社内規程
         Set response = agent.Run(session, goal, maxIterations, monitor)
         // 実際のツール呼び出し明細はセッション履歴から描く。
         Do ..ShowTrajectory(session)
-        Write "=== 最終応答 ===", !, response.Content, !
+        Write "=== 最終応答 ===", !
+        Do ..Say(response.Content)
+        Write !
         Set st = session.GetStats()
         Write "=== 集計 ===", !, "反復 ", monitor.Iterations, " 回 / ツール呼び出し ", st."total_tool_calls", " 回 / 累計トークン ", st."total_prompt_tokens" + st."total_completion_tokens", !
     } Catch ex {
@@ -81,13 +83,13 @@ ClassMethod ShowTrajectory(session As %AI.Agent.Session) As %Status
         Set m = session.GetMessage(i)
         Set role = m.role
         If role = "user" {
-            Write "  👤 質問: ", $Extract(m.content, 1, 60), !
+            Write "  👤 質問: ", ..OneLine(m.content, 60), !
         }
         ElseIf role = "assistant" {
             If $IsObject(m.%Get("tool_calls")) {
                 Set it = m.%Get("tool_calls").%GetIterator()
                 While it.%GetNext(.k, .tc) {
-                    Write "  🤖→🔧 ツール呼び出し: ", tc.name, " ", $Select($IsObject(tc.arguments): tc.arguments.%ToJSON(), 1: tc.arguments), !
+                    Write "  🤖→🔧 ツール呼び出し: ", tc.name, " ", ..OneLine($Select($IsObject(tc.arguments): tc.arguments.%ToJSON(), 1: tc.arguments), 80), !
                 }
             }
             Else {
@@ -95,10 +97,25 @@ ClassMethod ShowTrajectory(session As %AI.Agent.Session) As %Status
             }
         }
         ElseIf role = "tool" {
-            Write "  🔧→🤖 ツール結果: ", $Extract(m.content, 1, 50), "…", !
+            Write "  🔧→🤖 ツール結果: ", ..OneLine(m.content, 50), "…", !
         }
     }
     Return $$$OK
+}
+
+/// 改行を CRLF に正規化して書き出す(TTY で LF だけだと行頭に戻らず段組みがずれるため)。
+ClassMethod Say(text As %String) [ Private ]
+{
+    Set text = $Replace(text, $Char(13, 10), $Char(10))
+    Set text = $Replace(text, $Char(10), $Char(13, 10))
+    Write text
+}
+
+/// 改行・タブを空白に潰し、先頭 max 文字だけを1行プレビューとして返す。
+ClassMethod OneLine(text As %String, max As %Integer = 60) As %String [ Private ]
+{
+    Set text = $Translate(text, $Char(13, 10, 9), "   ")
+    Return $Extract(text, 1, max)
 }
 
 }
