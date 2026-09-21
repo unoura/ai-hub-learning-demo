@@ -1,8 +1,8 @@
-# 設計: 手順2 IRISSECURITY 暗号化
+# 設計: IRISSECURITY 暗号化(構成要素)
 
 ## ねらい
 
-`IRISSECURITY` データベースを暗号化し、そこに格納される認証情報・**Wallet のシークレット(手順3の API キー)を保存時(at-rest)で保護**する。手順3で Wallet に入れる API キーが暗号化される前提を作る。
+`IRISSECURITY` データベースを暗号化し、そこに格納される認証情報・**Wallet のシークレット(Wallet 構成要素の API キー)を保存時(at-rest)で保護**する。Wallet 構成要素で入れる API キーが暗号化される前提を作る。
 
 > **注意**: 参照元(`ai-hub-dev-template` / `aihub-demo`)には IRISSECURITY / DB 暗号化の実装は**存在しない**。本手順は IRIS 標準の暗号化 API に基づく**新規設計**であり、実機ドキュメント(`iris-agentic-dev tool iris_doc`)と実機挙動で裏付けたものである。
 

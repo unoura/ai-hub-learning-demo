@@ -1,21 +1,22 @@
-# 設計: 手順4 エージェント Hello World
+# 設計: プレインエージェント(ツールを持たない最小構成)
 
 ## ねらい
 
-AI Hub の Native Agent(`%AI.Agent`)で最小の「Hello World」を作り、手順3で Wallet に登録した
+AI Hub の Native Agent(`%AI.Agent`)でツールを持たない最小のプレインエージェントを作り、Wallet 構成要素で登録した
 API キーを **ConfigStore の名前参照だけ**で解決して、実際に LLM と対話できることを確認する。
-これで「Docker → 暗号化 → Wallet → エージェント」の一連が閉じる。
+これで「構成要素(Docker → 暗号化 → Wallet)→ プレインエージェント」の一連が閉じ、
+ここから権限で振る舞いが変わる先生エージェントへ発展させる土台になる。
 
-プロバイダは固定せず、**手順3で登録したもの(openai / anthropic / bedrock のどれでも)を
+プロバイダは固定せず、**Wallet 構成要素で登録したもの(openai / anthropic / bedrock のどれでも)を
 起動時に自動採用**する。顧客ごとに使うプロバイダが異なる(OpenAI / Anthropic が多い)一方、
 デモ環境は Bedrock 経由の場合もある、という前提に合わせた。
 
 ## 採用した構成(実機で疎通確認済み)
 
-**共通ベース + 最小エージェント**の2クラスにした。プロバイダ選択の共通ロジックをベースに集約する。
+**共通ベース + プレインエージェント**の2クラスにした。プロバイダ選択の共通ロジックをベースに集約する。
 
 - `src/Demo/Agent/Base.cls`(`%AI.Agent` 継承・abstract)— マルチプロバイダ選択を `%OnInit()` に実装。
-- `src/Demo/Agent/Hello.cls`(`Demo.Agent.Base` 継承)— システムプロンプトと実行ヘルパだけ。
+- `src/Demo/Agent/Plain.cls`(`Demo.Agent.Base` 継承)— システムプロンプトと実行ヘルパだけ。
 
 | 要素 | 採用 | 理由 |
 |---|---|---|
@@ -37,10 +38,10 @@ API キーを **ConfigStore の名前参照だけ**で解決して、実際に L
 ### なぜ Tool / ToolSet を作らないか
 
 当初案は AI Hub の4層(Tool → ToolSet → Agent → MCP)を一通り見せる構成だったが、
-**「Hello World = Wallet のキーで LLM に到達できる」ことの確認**が手順4の目的なので、
-ツール呼び出しは含めない最小構成にした。ツール・MCP 公開は発展形として後段に回す。
+**「Wallet のキーで LLM に到達できる」ことの確認**がプレインエージェントの目的なので、
+ツール呼び出しは含めない最小構成にした。ツール・MCP 公開は先生エージェントなど発展形として後段に回す。
 
-## Wallet → エージェントの解決チェーン(手順3と接続)
+## Wallet → エージェントの解決チェーン(Wallet 構成要素と接続)
 
 ```
 %New() → %Init()  (…RegisterDefaults / LoadInstructions … の後、最後に %OnInit)
@@ -74,10 +75,10 @@ API キーを **ConfigStore の名前参照だけ**で解決して、実際に L
 |---|---|---|
 | プロバイダ選択 | 登録済みを優先順に自動採用(単純な first-match) | 用途別に複数設定を持ち名前で選ぶ / ルーティング。ConfigStore の descriptor を正式定義 |
 | コードロード | `src/` 起動時 `LoadDir` | ZPM(`module.xml`)でパッケージ配布 |
-| ツール | なし(最小 Hello World) | `%AI.Tool` / `%AI.ToolSet` / `%AI.MCP.Service` で機能拡張 |
+| ツール | なし(ツールを持たない最小構成) | `%AI.Tool` / `%AI.ToolSet` / `%AI.MCP.Service` で機能拡張 |
 
-## 手順3との接続
+## Wallet 構成要素との接続
 
 エージェントは平文キーもプロバイダ名もソースに持たず、`AI.LLM.*` という ConfigStore の**名前**でしか
-API キーを参照しない。実体は手順3で Wallet(暗号化 IRISSECURITY、手順2)に保護されている。
-したがって本手順は手順2・3の上にしか成立しない。
+API キーを参照しない。実体は Wallet 構成要素で Wallet(暗号化 IRISSECURITY)に保護されている。
+したがってプレインエージェントは暗号化・Wallet の構成要素の上にしか成立しない。

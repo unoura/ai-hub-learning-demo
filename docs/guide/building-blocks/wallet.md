@@ -1,14 +1,14 @@
-# 手順3: ウォレットで OpenAI / Claude / Bedrock のキーを受け渡す
+# 構成要素: ウォレットで OpenAI / Claude / Bedrock のキーを受け渡す
 
 OpenAI・Claude(Anthropic)・Amazon Bedrock の API キー(Bedrock は bearer token)を
 IRIS の **Secure Wallet** に格納し、アプリからは
 **ConfigStore の参照だけ**で扱います。Wallet の実体は `IRISSECURITY`
-データベース(`^WALLET`)なので、手順2で暗号化済みのため、キーは**保存時(at-rest)で暗号化**
+データベース(`^WALLET`)なので、暗号化構成要素で暗号化済みのため、キーは**保存時(at-rest)で暗号化**
 されて保存されます。ソースコードや設定に平文の API キーは一切残りません。
 
 > Secure Wallet は IRIS 2025.3 で導入、2026.1(EM)で一般提供された機能です。
 > 設計・判断根拠(なぜこの構成か、本番運用との違い)は
-> [../design/03-wallet-api-keys.md](../design/03-wallet-api-keys.md) を参照。
+> [../../design/building-blocks/wallet.md](../../design/building-blocks/wallet.md) を参照。
 
 ## 方針: キーは「手動登録」のみ(環境変数に出さない)
 
@@ -39,11 +39,11 @@ IRIS の **Secure Wallet** に格納し、アプリからは
 
 > **なぜ2層(Wallet + ConfigStore)か**: Wallet が機密の実体(暗号化 IRISSECURITY)、
 > ConfigStore は「どのプロバイダ・モデルで、キーはどの Wallet 参照か」という**設定と参照**を持ちます。
-> アプリ(手順4のエージェント)は `AI.LLM.*` と**名前で参照するだけ**で、平文キーには触れません。
+> アプリ(エージェント)は `AI.LLM.*` と**名前で参照するだけ**で、平文キーには触れません。
 
 ## 手順
 
-コンテナを起動しておき(手順1・2)、`docker compose exec -it` で**対話実行**します。
+コンテナを起動しておき(Docker・暗号化の構成要素)、`docker compose exec -it` で**対話実行**します。
 
 ```bash
 # OpenAI キーを登録(モデルは任意。既定 gpt-5.6)
@@ -64,7 +64,7 @@ docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bed
 ```
 
 - `-it`(TTY)必須です。非表示入力のために対話端末が要ります。
-- **どれか1つ登録すれば OK**(手順4のエージェントは登録済みのものを自動採用します)。
+- **どれか1つ登録すれば OK**(エージェントは登録済みのものを自動採用します)。
 - 貼り付け時に**先頭1文字が欠ける**端末があります。`len=` が想定より短い/`sk-` 以外で
   始まる場合は再実行してください(上書き登録なのでやり直し自由)。
 - **Bedrock**: 認証は API キーでなく **bearer token**。モデルは**クロスリージョン推論プロファイル ID**
@@ -77,7 +77,7 @@ docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bed
 ## 動作確認
 
 Wallet に暗号化保存され、ConfigStore は参照だけを持ち、`@{config:...}` で平文に解決できること
-(= 手順4のエージェントが使う経路)を確認します。**平文キーを画面に出さないよう**マスク表示します。
+(= エージェントが使う経路)を確認します。**平文キーを画面に出さないよう**マスク表示します。
 
 ```bash
 docker compose exec -T iris iris session IRIS -U %SYS <<'OBJSCRIPT'
@@ -99,7 +99,7 @@ OBJSCRIPT
 > 本デモの `%SYS` セッションは `%All` を持つため追加設定は不要ですが、権限の無いユーザで
 > `GetSecretValue` を呼ぶと「アクセスが拒否されました」になります。
 
-キーが暗号化 IRISSECURITY に保存されていること(手順2との接続)は `IRISSECURITY` の
-`EncryptedDB=1` で担保されます([手順2の動作確認](02-irissecurity-encryption.md#動作確認))。
+キーが暗号化 IRISSECURITY に保存されていること(暗号化構成要素との接続)は `IRISSECURITY` の
+`EncryptedDB=1` で担保されます([暗号化の動作確認](encryption.md#動作確認))。
 
 > **キーを差し替えたいとき**: ヘルパを同じプロバイダで再実行するだけです(削除→再作成を内部で行う上書き登録)。

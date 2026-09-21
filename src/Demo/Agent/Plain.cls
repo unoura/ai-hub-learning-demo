@@ -1,6 +1,6 @@
-/// デモ用の最小エージェント(手順4)。
+/// プレインエージェント: ツールを持たず LLM と会話するだけの最小エージェント。
 ///
-/// プロバイダは固定せず [[Demo.Agent.Base]] を継承する。手順3で Secure Wallet /
+/// プロバイダは固定せず [[Demo.Agent.Base]] を継承する。構成要素の Wallet /
 /// ConfigStore に登録したキー(openai / anthropic / bedrock のどれでも)が
 /// `%OnInit()` で自動採用される。ソースには平文もプロバイダ名も持たない。
 ///
@@ -9,7 +9,8 @@
 ///     → 平文キーは %AI.Provider 生成時のメモリ上にだけ現れる
 ///
 /// 会話フロー: %New() → %Init() → CreateSession() → Chat(session,input)。
-Class Demo.Agent.Hello Extends Demo.Agent.Base
+/// ここから権限で振る舞いが変わる先生エージェントへ発展する。
+Class Demo.Agent.Plain Extends Demo.Agent.Base
 {
 
 /// システムプロンプト。text/markdown として %LoadInstructions() が読み込む。
@@ -29,7 +30,7 @@ XData INSTRUCTIONS [ MimeType = "text/markdown" ]
 
 /// デモ用ワンショット実行: 1メッセージ送って応答本文を表示する。
 ///
-///   DEMO> do ##class(Demo.Agent.Hello).RunOnce("自己紹介して")
+///   DEMO> do ##class(Demo.Agent.Plain).RunOnce("自己紹介して")
 ClassMethod RunOnce(input As %String = "自己紹介して") As %Status
 {
 	try {

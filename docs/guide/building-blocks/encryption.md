@@ -1,10 +1,10 @@
-# 手順2: IRISSECURITY を暗号化する
+# 構成要素: IRISSECURITY を暗号化する
 
 IRIS のセキュリティデータベース `IRISSECURITY` を暗号化し、そこに格納される認証情報・Wallet の
-シークレットを**保存時(at-rest)で保護**します。手順3で Wallet に入れる API キーが暗号化されます。
+シークレットを**保存時(at-rest)で保護**します。次の構成要素で Wallet に入れる API キーが暗号化されます。
 
 > 設計・判断根拠(なぜこの機構か、本番運用との違い)は
-> [../design/02-irissecurity-encryption.md](../design/02-irissecurity-encryption.md) を参照。
+> [../../design/building-blocks/encryption.md](../../design/building-blocks/encryption.md) を参照。
 
 ## 仕組み(概要)
 
@@ -22,7 +22,7 @@ IRIS のセキュリティデータベース `IRISSECURITY` を暗号化し、�
 
 ## 手順
 
-手順1の環境で `docker compose up -d --build` を実行すれば、初回起動時に自動で暗号化まで完了します。
+Docker 構成要素の環境で `docker compose up -d --build` を実行すれば、初回起動時に自動で暗号化まで完了します。
 特別な操作は不要です。進行はログで確認できます。
 
 ```bash

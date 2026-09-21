@@ -1,6 +1,6 @@
-# 手順1: Docker で動作する環境をつくる
+# 構成要素: Docker で動作する環境をつくる
 
-軽量な IRIS(iris-community, AI Hub EAP)を Docker で起動し、以降の手順の土台となる
+軽量な IRIS(iris-community, AI Hub EAP)を Docker で起動し、以降の構成要素の土台となる
 名前空間 `DEMO` と AI Hub SDK が使える状態を作ります。データは Durable %SYS で永続化します。
 
 ## 前提
@@ -12,7 +12,7 @@
 ## 起動
 
 ```bash
-# (任意)API キーを使う場合のみ。手順1では未設定でも起動できます
+# (任意)API キーを使う場合のみ。この構成要素では未設定でも起動できます
 cp .env.example .env   # 値を編集
 
 # ビルド & 起動

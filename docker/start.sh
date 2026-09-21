@@ -15,10 +15,10 @@ set -e
   done
   echo "[demo] IRIS 準備完了。初回初期化(IRISSECURITY 暗号化)を実行します..."
   bash /home/irisowner/dev/docker/first-boot-encrypt.sh
-  # 手順3(Wallet への API キー登録)は自動化しない。
+  # Wallet への API キー登録は自動化しない。
   # キーは環境変数/.env に出さず、手動で docker/register-key.sh を実行して登録する。
 
-  # 手順4: DEMO 名前空間へアプリコード(src/)をロード&コンパイル(毎起動・冪等)。
+  # DEMO 名前空間へアプリコード(src/)をロード&コンパイル(毎起動・冪等)。
   echo "[demo] src/ を DEMO 名前空間へロードします..."
   iris session IRIS -U DEMO <<'LOADSRC'
  set sc=$system.OBJ.LoadDir("/home/irisowner/dev/src","ck",.err,1)

@@ -6,11 +6,13 @@
 ## 全体像
 
 ```
-軽量 IRIS(Docker) → IRISSECURITY を暗号化 → Wallet に API キーを保護 → エージェントで Hello World
+構成要素(Docker → 暗号化 → Wallet)を土台に、プレインエージェント、そして先生エージェント
 ```
 
-手順2で IRISSECURITY データベースを暗号化することにより、手順3で Wallet に格納する API キーが
+暗号化された IRISSECURITY の上に Wallet を載せることで、Wallet に格納する API キーが
 **保存時(at-rest)で保護**される、という一貫したストーリーになっています。
+この3つの構成要素を土台に、まずツールを持たないプレインエージェント、
+そこから権限で振る舞いが変わる先生エージェントへ発展させます。
 
 ## ドキュメント構成
 
@@ -19,12 +21,20 @@
 - **[docs/guide/](docs/guide/)** — 聴衆向け。完成した手順と説明。まずはここから。
 - **[docs/design/](docs/design/)** — 設計・判断根拠。なぜその構成にしたか。
 
-| # | 手順 | ガイド | 設計 |
-|---|---|---|---|
-| 1 | Docker で動作する IRIS 環境 | [guide](docs/guide/01-docker-environment.md) | [design](docs/design/01-docker-environment.md) |
-| 2 | IRISSECURITY の暗号化 | [guide](docs/guide/02-irissecurity-encryption.md) | [design](docs/design/02-irissecurity-encryption.md) |
-| 3 | Wallet で OpenAI / Claude のキー受け渡し | [guide](docs/guide/03-wallet-api-keys.md) | [design](docs/design/03-wallet-api-keys.md) |
-| 4 | エージェントで Hello World | [guide](docs/guide/04-agent-hello-world.md) | [design](docs/design/04-agent-hello-world.md) |
+**構成要素(building-blocks)** — エージェントが安全に動く土台:
+
+| 構成要素 | ガイド | 設計 |
+|---|---|---|
+| Docker で動作する IRIS 環境 | [guide](docs/guide/building-blocks/docker.md) | [design](docs/design/building-blocks/docker.md) |
+| IRISSECURITY の暗号化 | [guide](docs/guide/building-blocks/encryption.md) | [design](docs/design/building-blocks/encryption.md) |
+| Wallet で OpenAI / Claude のキー受け渡し | [guide](docs/guide/building-blocks/wallet.md) | [design](docs/design/building-blocks/wallet.md) |
+
+**エージェント(agents)** — 上記の土台の上で動かす:
+
+| エージェント | ガイド | 設計 |
+|---|---|---|
+| プレインエージェント(会話するだけの最小構成) | [guide](docs/guide/agents/plain-agent.md) | [design](docs/design/agents/plain-agent.md) |
+| 先生エージェント(権限で振る舞いが変わる発展形) | — | [design](docs/design/agents/teacher-agent.md) |
 
 ## 技術スタックの前提
 
@@ -40,4 +50,4 @@ docker compose up -d --build  # ビルド & 起動
 docker compose exec -it iris iris session iris -U DEMO
 ```
 
-詳細は [docs/guide/01-docker-environment.md](docs/guide/01-docker-environment.md) を参照。
+詳細は [docs/guide/building-blocks/docker.md](docs/guide/building-blocks/docker.md) を参照。
