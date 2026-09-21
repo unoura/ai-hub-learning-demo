@@ -34,7 +34,7 @@
 | エージェント | ガイド | 設計 |
 |---|---|---|
 | プレインエージェント(会話するだけの最小構成) | [guide](docs/guide/agents/plain-agent.md) | [design](docs/design/agents/plain-agent.md) |
-| 先生エージェント(権限で振る舞いが変わる発展形) | — | [design](docs/design/agents/teacher-agent.md) |
+| 先生エージェント(権限で振る舞いが変わる発展形) | [guide](docs/guide/agents/teacher-agent.md) | [design](docs/design/agents/teacher-agent.md) |
 
 ## 技術スタックの前提
 

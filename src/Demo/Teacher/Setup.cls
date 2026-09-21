@@ -41,6 +41,7 @@ ClassMethod CountOf(table As %String) As %Integer
 /// 既存の教材データとベクトルインデックスを消去。
 ClassMethod Clear() As %Status
 {
+    Do ##class(Demo.Teacher.Progress).%DeleteExtent()
     Do ##class(Demo.Teacher.AnswerKey).%DeleteExtent()
     Do ##class(Demo.Teacher.Question).%DeleteExtent()
     Do ##class(Demo.Teacher.Policy).%DeleteExtent()

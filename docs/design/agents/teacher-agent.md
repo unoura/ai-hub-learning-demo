@@ -1,7 +1,11 @@
 # 設計: 先生(トレーナー)エージェント(発展形)
 
-> 本ドキュメントは**シナリオ設計と実現方式の確定**が目的。実装コードは設計合意後に着手する。
+> 本ドキュメントは**シナリオ設計と実現方式の確定**が目的。
 > 聴衆向け手順は後日 `docs/guide/agents/teacher-agent.md`、実施記録は `local/worklog/agents/teacher-agent.md` に分ける(混ぜない)。
+>
+> **実装状況(2026-09-21)**: 第1段(教材データ + ベクトル検索)・第2段(権限制御 + ツール群 + trajectory + RunAs)とも
+> **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は `Demo.Teacher.*`
+> パッケージに収めた(当初スケッチの `Demo.Policy.*` / `Demo.ToolSet.*` / `Demo.RunAs` は下記の実クラス名で置き換わる)。
 
 ## テーマと一言メッセージ
 
@@ -42,14 +46,27 @@ IRIS に格納。エージェントは1つ(`Demo.Agent.Teacher`、プレイン�
 | `ViewProgress` | 受講者の学習履歴・スコアを参照 | `Demo_Grade` | ❌ | ✅ |
 | `RecordScore` | 採点結果を記録(書込) | `Demo_Grade` | ❌ | ✅ |
 
-- 共通ツールセット `Demo.ToolSet.Learn`(SearchPolicy / GetHint)。
-- 監査ツールセット `Demo.ToolSet.Audit`(GetAnswerKey / ViewProgress / RecordScore)。
-- ToolSet XML でツールに**リソース要件メタデータ**を付ける:
+**実装(第2段で確定)**: ツールは役割ごとに分けて `Demo.Teacher.Tools.*` に置き、1つのツールセット
+`Demo.Teacher.ToolSet` にまとめた(SearchPolicy だけは KnowledgeBase なのでエージェントへ別途登録)。
+
+| クラス | ツール | 要件リソース |
+|---|---|---|
+| `Demo.Teacher.Tools.Learn` | `GetHint` | `Demo_LearnRead`(全員) |
+| `Demo.Teacher.Tools.AnswerKey` | `GetAnswerKey` | `Demo_AnswerKey`(監査のみ) |
+| `Demo.Teacher.Tools.Grade` | `ViewProgress` / `RecordScore` | `Demo_Grade`(監査のみ) |
+
+- ToolSet XML で各 Include に**リソース要件メタデータ**を付ける(要件名は小文字 `resource`。`metadata.%Get("resource")` で読む):
   ```xml
-  <Include Class="Demo.ToolSet.Audit">
-    <Requirement Name="Resource" Value="Demo_AnswerKey"/>
-  </Include>
+  <ToolSet Name="Teacher">
+    <Policies><Authorization Class="Demo.Teacher.RoleGuard"/></Policies>
+    <Include Class="Demo.Teacher.Tools.Learn"><Requirement Name="resource" Value="Demo_LearnRead"/></Include>
+    <Include Class="Demo.Teacher.Tools.AnswerKey"><Requirement Name="resource" Value="Demo_AnswerKey"/></Include>
+    <Include Class="Demo.Teacher.Tools.Grade"><Requirement Name="resource" Value="Demo_Grade"/></Include>
+  </ToolSet>
   ```
+- `<Requirement>` はその Include に含まれる全ツールにメタデータを stamp する。エージェントへの取り付けは
+  `agent.UseToolSet("Demo.Teacher.ToolSet")`。ツールは **`CreateSession()` の前に取り付ける**(session が
+  取り付け済みツールをスナップショットするため)。
 
 ## 中核機構の実現方式(build .136 で実機確認済み)
 
@@ -62,32 +79,36 @@ IRIS に格納。エージェントは1つ(`Demo.Agent.Teacher`、プレイン�
 
 | メソッド | 役割 | デモでの使い方 |
 |---|---|---|
-| `%CanList(tool, metadata) → %Boolean` | **LLM に見せるか**(ディスカバリ) | `0` を返すとカタログから消える。`metadata.%Get("Resource")` を読み `$SYSTEM.Security.Check(res,"USE")` で判定 |
-| `%CanExecute(tool, call, metadata) → %Status` | 実行してよいか | 二重防御。未認可なら `$$$ERROR($$$AICoreToolAccessDenied,...)` |
+| `%CanList(tool As %String, metadata) → %Boolean` | **LLM に見せるか**(ディスカバリ) | `0` を返すとカタログから消える。`metadata.%Get("resource")` を読み `$SYSTEM.Security.Check(res,"USE")` で判定 |
+| `%CanExecute(tool As %String, call, metadata) → %Status` | 実行してよいか | 二重防御。未認可なら `$$$ERROR($$$AICoreToolAccessDenied,...)` |
+
+> **署名の実機注意**: どちらも**第1引数はツール名(`%String`)**であって `%AI.Tool` ではない(間違えると
+> コンパイル #5478 署名エラー)。クラスは `Include (%AI, %occStatus)` が必要。実装は `Demo.Teacher.RoleGuard`。
 
 - ツールカタログの生成経路: `agent.ToolManager.%Discover()` が返す `%DynamicArray` を `%CanList` が絞る。
   → **LLM は見えないツールを呼べない**。プロンプトインジェクションで解答を引き出そうとしても、
   そもそもツールが存在しない(=土台での封じ込め)。
-- ポリシーの取り付け: `%AI.ToolMgr.SetAuthPolicy(policy)`、または ToolSet XML
-  `<Policies><Authorization Class="Demo.Policy.RoleGuard"/></Policies>`。
+- ポリシーの取り付け: ToolSet XML `<Policies><Authorization Class="Demo.Teacher.RoleGuard"/></Policies>`
+  (または `%AI.ToolMgr.SetAuthPolicy(policy)`)。
   **注意: 1つの ToolSet が持つ Authorization スロットは1つだけ**(2つ書くと後勝ち)。
-  → RBAC 判定は**1つのポリシークラス** `Demo.Policy.RoleGuard` に集約する。
-- ポリシー実装スケッチ:
+  → RBAC 判定は**1つのポリシークラス** `Demo.Teacher.RoleGuard` に集約する。
+- ポリシー実装(実クラス。要件名は小文字 `resource`):
   ```objectscript
-  Class Demo.Policy.RoleGuard Extends %AI.Policy.Authorization
+  Include (%AI, %occStatus)
+  Class Demo.Teacher.RoleGuard Extends %AI.Policy.Authorization
   {
     Method %CanList(tool As %String, metadata As %DynamicObject) As %Boolean
     {
-      Set res = metadata.%Get("Resource")
-      Return:res="" 1                                   // 要件なし = 見せる
+      Set res = ..RequiredResource(metadata)
+      If res = "" Return 1                              // 要件なし = 見せる
       Return $SYSTEM.Security.Check(res, "USE")         // 権限があれば見せる
     }
-    Method %CanExecute(tool, call, metadata) As %Status
+    Method %CanExecute(tool As %String, call As %DynamicObject, metadata As %DynamicObject) As %Status
     {
-      Set res = metadata.%Get("Resource")
-      Return:res="" $$$OK
-      Return:$SYSTEM.Security.Check(res,"USE") $$$OK
-      Return $$$ERROR($$$AICoreToolAccessDenied, tool)
+      Set res = ..RequiredResource(metadata)
+      If res = "" Return $$$OK
+      If $SYSTEM.Security.Check(res, "USE") Return $$$OK
+      Return $$$ERROR($$$AICoreToolAccessDenied, "権限がありません(必要リソース: " _ res _ ")")
     }
   }
   ```
@@ -98,36 +119,61 @@ IRIS に格納。エージェントは1つ(`Demo.Agent.Teacher`、プレイン�
 それぞれの identity でエージェントを動かす必要がある。ところが `$SYSTEM.Security.Login` は
 **プロセス内で取り消せず、一度落とした %All は戻せない**(`aihub-demo/RoleBaseDemo` で確認済みの idiom)。
 
-→ **各ロールごとに `JOB` で子プロセスを起こし、その中で `$SYSTEM.Security.Login("<user>")`**
-してからエージェントを実行する「RunAs」方式にする。デモ用ヘルパ `Demo.RunAs`(仮)を用意し、
-`Demo.RunAs.Learner(prompt)` / `Demo.RunAs.Auditor(prompt)` で同一プロンプトを2つの identity で流す。
-子プロセスの標準出力(trajectory + 応答)を親が受け取り、並べて表示する。
+→ **各ロールごとに `JOB` で子プロセスを起こし、その中で `$SYSTEM.Security.Login("<user>", pwd)`**
+してからディスカバリ/実行する「RunAs」方式にする(実装 `Demo.Teacher.RunAs`)。
+`do ##class(Demo.Teacher.RunAs).Compare()` が learner01 / auditor01 の両方を JOB し、それぞれが見える
+ツール名を並べて表示する。**子は親の名前空間(DEMO)を継承**し、Login でデモユーザの identity・ロールに切り替わる。
+子プロセスの標準出力は親に届かないため、**結果(user / roles / 見えたツール名)を `/tmp/runas_<user>.json` に
+書き出し、親がファイルの出現をポーリングして回収**する(`%Stream.FileCharacter`)。
 
-> 簡易的措置: デモでは Login 可能な最小ユーザ(受講者用 / 監査用)を起動時に作成しておく
-> (Wallet 構成要素の Resources 作成と同じ流儀)。本番は既存の認証(LDAP/OAuth/Delegated 等)に接続する。
+- 実機検証: learner01(`Demo_Learner,Demo_Runtime`)→ `GetHint` のみ。auditor01(`Demo_Auditor,Demo_Runtime`)
+  → `GetAnswerKey` / `GetHint` / `RecordScore` / `ViewProgress` の4つ。**同じ `%Discover()` 呼び出しでも
+  ロールで結果が変わる**ことを実演できた。
+- ディスカバリは `set mgr=##class(%AI.ToolMgr).%New()` → `do mgr.RegisterToolSet("Demo.Teacher.ToolSet")`
+  → `set arr=mgr.%Discover()`(`%CanList` が権限で絞った配列が返る)。
+
+> 簡易的措置: デモでは Login 可能な最小ユーザ(受講者用 learner01 / 監査用 auditor01)を
+> `Demo.Teacher.Security.SetupRBAC()` で作成する(Wallet 構成要素の Resources 作成と同じ流儀)。
+> **ユーザ名はロール名と重複できない**(大文字小文字を無視して衝突すると #942)ため接尾辞 `01` を付けた。
+> 本番は既存の認証(LDAP/OAuth/Delegated 等)に接続する。
+
+> **土台とアプリ権限の分離(実機で必要だった)**: アプリリソース(`Demo_LearnRead` 等)のロールだけを
+> 持つユーザは、そもそも DEMO 名前空間でコードを動かせない。そこで DB 権限(`%DB_DEMO_CODE` 等)を持つ
+> **実行基盤ロール `Demo_Runtime`** を別に作り、各デモユーザへ「アプリロール + Demo_Runtime」の2本立てで付与した。
+> 「動かせる土台」と「何を見せるか(アプリ権限)」を層で分けるのは、そのままハーネスの設計思想でもある。
 
 ### ② trajectory(軌跡)の取得と可視化(見どころ)
 
-`Run(session, goal, maxIterations=10, callbackOref)` の **callback** で各反復を捕捉する:
+**実機で判明した粒度(重要)**: `Run(session, goal, maxIterations, callbackOref)` は**外側ループ**で、
+その内側で `Chat` が**ツール呼び出しループ**(推論→ツール実行→再推論)を回す。callback の
+`OnIterationStart` / `OnIterationComplete` は**外側1反復ごと**に発火し、`OnIterationComplete` が受け取る
+`response` は**その反復のツール実行後の最終応答**なので `HasToolCalls()=0`。
+→ **ツール呼び出しの明細は callback からは取れない**。callback は「反復回数」と「トークン使用量」という
+ハーネス側の観測点に徹し(実装 `Demo.Teacher.Monitor`)、**ツール明細はセッション履歴から描く**(下記)。
 
 ```objectscript
-Class Demo.Trajectory.Monitor Extends %RegisteredObject
+Class Demo.Teacher.Monitor Extends %RegisteredObject   // 基底クラス不要のただの %RegisteredObject
 {
+  Property Iterations As %Integer [ InitialExpression = 0 ];
   Method OnIterationStart(iteration As %Integer, maxIter As %Integer, session As %AI.Agent.Session)
-  { write "[step ",iteration,"] 開始",! }
-
+  { set ..Iterations = iteration  write "  [反復 ",iteration,"/",maxIter,"] 推論中…",! }
   Method OnIterationComplete(iteration As %Integer, response As %AI.LLM.Response, session As %AI.Agent.Session)
-  {
-    if response.HasToolCalls() {
-      set it = response.ToolCalls.%GetIterator()
-      while it.%GetNext(.k, .call) { write "  → tool: ",call.name," ",call.arguments,! }
-    }
-  }
+  { if $isobject(response.Usage) write "      トークン(累計): ",response.Usage."total_tokens",! }
 }
 ```
 
-- `%AI.Agent.Session` が**軌跡の永続ストア**(LLM ターン + ツール呼び出し + 観測の履歴)。
-  `session.GetStats()` → `total_prompt_tokens` / `total_completion_tokens` / `total_tool_calls` 等。
+- **ツール明細はセッション履歴から再構成する**(`Demo.Teacher.Teacher.ShowTrajectory`)。
+  `session.MessageCount()` + `session.GetMessage(i)`(`%DynamicObject`)。各メッセージの `role` は
+  user / assistant / tool。assistant は `.%Get("tool_calls")`(配列、各要素 `.name` / `.arguments`)を持つ場合があり、
+  tool メッセージは `.content`(ツール結果 JSON)を持つ。これで
+  👤質問 → 🤖→🔧ツール呼び出し → 🔧→🤖ツール結果 → 🤖回答 の連鎖を描ける。
+- `%AI.Agent.Session` が**軌跡の永続ストア**。`session.GetStats()` →
+  `total_prompt_tokens` / `total_completion_tokens` / `total_tool_calls`(実呼び出し数はここに出る)/ `total_interactions` 等。
+- **実機検証**: `do ##class(Demo.Teacher.Teacher).RunLesson()` が SearchPolicy を実呼びし、
+  情報管理規程 第7条・第25条を**出典付き**で回答。trajectory(質問→SearchPolicy 呼び出し→結果→回答生成)と
+  集計(反復1 / ツール呼び出し1 / 累計トークン ~4200)を表示できた。
+- **プロンプト依存の注意**: 配線が正しくてもプロンプトが弱いとモデルがツールを呼ばず一般論で答えることがある。
+  ゴールは「〜を調べて出典付きで教えて」のように**ツールを使う必然**がある形にする。
 - デモの対比: **同じプロンプト**「パスワードの使い回しは規程違反か? 練習問題も出して答え合わせして」を
   受講者/監査で流し、軌跡を並べる:
   ```
@@ -193,7 +239,7 @@ Class Demo.Trajectory.Monitor Extends %RegisteredObject
 | 練習問題 | `Demo.Teacher.Question(Category, Prompt, Difficulty)` | 全員 | DEMO_DATA | ✅ 実装・投入(4件) |
 | 模範解答・評価基準 | `Demo.Teacher.AnswerKey(Question→, ModelAnswer, Rubric)` | 監査のみ | DEMO_DATA(+ ツール権限) | ✅ 実装・投入(4件) |
 | ベクトルインデックス | `Demo_Teacher.PolicyVec`(VectorStore.IRIS が生成、384次元) | — | DEMO_DATA | ✅ `Demo.Teacher.Setup` が構築 |
-| 受講者スコア(個人情報) | `Demo.Teacher.Progress(Learner, Question→, Score, Ts)` | 監査のみ | DEMO_DATA(+ ツール権限) | ⏳ 次フェーズ(RecordScore が書く実行時状態) |
+| 受講者スコア(個人情報) | `Demo.Teacher.Progress(Learner, Question→, Score, Ts)` | 監査のみ | DEMO_DATA(+ ツール権限) | ✅ 実装(`RecordScore` が書き `ViewProgress` が読む実行時状態) |
 
 - 埋め込みは Policy 列には持たせず、KB の VectorStore テーブル `Demo_Teacher.PolicyVec` に分離
   (原本=`Demo.Teacher.Policy` / 検索索引=`PolicyVec` を分けることで再インデックスや原本編集がしやすい)。
@@ -237,6 +283,8 @@ Class Demo.Trajectory.Monitor Extends %RegisteredObject
 2. 埋め込み = **FastEmbed 固定**(384次元・キー不要・プロバイダ非依存)。日本語品質の限界は上記のとおり
    把握済みで、承知の上で FastEmbed のまま採用(デモは検索が効く質問に寄せ、弱点は正直に説明)。
 3. identity 切替 = **JOB 子 + `$SYSTEM.Security.Login` の RunAs 方式**。
-4. 実装は段階的に進める。**第1段(教材データ + ベクトル検索)は完了**(`Demo.Teacher.Policy/Question/AnswerKey/Setup`、
-   `Demo_Teacher.PolicyVec`、SearchPolicy 検索の実機確認)。次段は権限制御・ツール群・trajectory・RunAs。
-   `guide/agents/teacher-agent.md`(聴衆向け)は全体が固まってから執筆。
+4. 実装は段階的に進める。**第1段(教材データ + ベクトル検索)完了**(`Demo.Teacher.Policy/Question/AnswerKey/Setup`、
+   `Demo_Teacher.PolicyVec`、SearchPolicy 検索の実機確認)。**第2段(権限制御 + ツール群 + trajectory + RunAs)完了**
+   (`Tools.Learn/AnswerKey/Grade`、`RoleGuard`、`ToolSet`、`Security`(RBAC)、`RunAs`、`Monitor`、`Teacher`、`Progress`。
+   RunAs で権限別ディスカバリ差、RunLesson で出典付き回答と trajectory を実機確認)。
+   聴衆向け `guide/agents/teacher-agent.md` 執筆済み(2026-09-21)。
