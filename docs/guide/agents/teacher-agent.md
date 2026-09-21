@@ -111,6 +111,36 @@ auditor01(...)が見えるツール: GetAnswerKey, GetHint, RecordScore, ViewPro
 > **不可逆に**切り替えるため、`RunAs` は各ロールごとに `JOB` で子プロセスを起こし、その中でログイン→
 > ディスカバリしています。
 
+### 「取れる行動」も変わる(ツールを実際に実行)
+
+見えるだけでなく、**実際にツールを実行**すると何が起きるかを対比します。各ユーザの identity で
+`GetAnswerKey`(模範解答)と `RecordScore`(採点)を実行します。
+
+```objectscript
+DEMO> do ##class(Demo.Teacher.RunAs).CompareActions()
+=== RunAs: ロール別の「取れる行動」 ===
+learner01(Demo_Learner,Demo_Runtime)が取れる行動:
+  GetAnswerKey(模範解答) → ✗ 権限なし: ツールがカタログに存在しません(%CanList で除外)
+  RecordScore(採点)      → ✗ 権限なし: ツールがカタログに存在しません(%CanList で除外)
+auditor01(Demo_Auditor,Demo_Runtime)が取れる行動:
+  GetAnswerKey(模範解答) → ✓ 実行OK: {"value":{"modelAnswer":"12文字以上 …","rubric":"…"}}
+  RecordScore(採点)      → ✓ 実行OK: {"value":{"learner":"auditor01","ok":1,"progressId":"…"}}
+----
+同じツール呼び出しでも、監査者だけが模範解答の参照・採点を実行できる(実行ゲート %CanExecute)。
+```
+
+- **受講者は同じツール名を呼んでも「カタログに存在しない」**。`%CanList` が実行前のカタログから除外
+  しているため、たとえツール名を知っていても呼べません(一次防御)。
+- **監査者は模範解答を取得でき、採点(`RecordScore`)は実際に Progress 行を書き込みます**。同じ
+  エージェント・同じツールセットでも、**identity で取れる行動が変わる**ことを実行結果で確認できます。
+
+> **多層防御(実装の勘どころ)**: ツールの可視性(`%CanList`/`%CanExecute`)に加えて、**SQL レベルでも**
+> ロールを揃えています。ツールの中身は SQL で DB を読み書きするため、`Security.SetupRBAC()` が
+> 受講者ロールには教材テーブル(規程・設問)の `SELECT` だけを、監査者ロールには模範解答・進捗テーブルの
+> `SELECT`/`INSERT` を付与します。**受講者は SQL からも模範解答を読めません**。
+> (DB 権限 `%DB_*` はオブジェクトアクセス用で、SQL には別途テーブル GRANT が要る、という IRIS の
+> 二層構造をそのまま活かしています。)
+
 ## 見どころ 2: trajectory とベクトル検索
 
 規程に関わるゴールを 1 つ与えて、エージェントの**思考と行動の連鎖**を可視化します。

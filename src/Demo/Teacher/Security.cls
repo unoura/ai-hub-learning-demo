@@ -57,7 +57,45 @@ ClassMethod SetupRBAC(pwd As %String = "SecDemo!2026") As %Status
     Set sc = ..EnsureUser("auditor01", "Demo_Auditor,Demo_Runtime", pwd, "研修トレーナー(デモ)")
     If $$$ISERR(sc) Return sc
 
+    // 5) SQL 権限(DEMO 名前空間のテーブル)。RoleGuard の可視性/実行ゲートと層を揃える。
+    Do ..GrantSql()
+
     Write "[security] リソース3 / ロール3(基盤1+アプリ2) / ユーザ2 を用意しました。", !
+    Return $$$OK
+}
+
+/// 各アプリロールに、担当ツールが使う SQL 権限を付与する。
+///
+/// %DB_* の DB 権限(オブジェクトアクセス。<method>%OpenId</method>/<method>%Save</method> はこれで動く)とは別に、
+/// ツールが使う SQL(<method>%SQL.Statement.%ExecDirect</method>)には**テーブル単位の GRANT** が要る。
+/// 権限の層は <class>Demo.Teacher.RoleGuard</class>(ツールの可視性/実行)と揃え、SQL レベルでも
+/// 受講者が模範解答・進捗を読めないようにする(多層防御)。
+///
+/// 注: ベクトル索引 <class>Demo_Teacher.PolicyVec</class> は Setup.BuildIndex で作られるため、ここでは対象外。
+/// エージェントを受講者 identity で走らせて SearchPolicy まで実行したい場合は、別途 SELECT を付与する。
+ClassMethod GrantSql() As %Status
+{
+    New $Namespace
+    Set $Namespace = "DEMO"
+    // 受講者: 教材(規程・設問)の参照のみ。
+    Do ..Grant("SELECT ON Demo_Teacher.Policy TO Demo_Learner")
+    Do ..Grant("SELECT ON Demo_Teacher.Question TO Demo_Learner")
+    // 監査者: 教材 + 模範解答 + 進捗(参照・記録)。
+    Do ..Grant("SELECT ON Demo_Teacher.Policy TO Demo_Auditor")
+    Do ..Grant("SELECT ON Demo_Teacher.Question TO Demo_Auditor")
+    Do ..Grant("SELECT ON Demo_Teacher.AnswerKey TO Demo_Auditor")
+    Do ..Grant("SELECT ON Demo_Teacher.Progress TO Demo_Auditor")
+    Do ..Grant("INSERT ON Demo_Teacher.Progress TO Demo_Auditor")
+    Return $$$OK
+}
+
+/// GRANT を1つ実行(冪等)。SQLCODE 100(既に付与済み)は正常扱い、負値のみ警告表示。
+ClassMethod Grant(clause As %String) As %Status [ Private ]
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "GRANT " _ clause)
+    If rs.%SQLCODE < 0 {
+        Write "  GRANT ", clause, " → SQLCODE ", rs.%SQLCODE, " ", rs.%Message, !
+    }
     Return $$$OK
 }
 

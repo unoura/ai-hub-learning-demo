@@ -19,6 +19,7 @@
 ドキュメントは目的別に分けています。
 
 - **[docs/guide/](docs/guide/)** — 聴衆向け。完成した手順と説明。まずはここから。
+  通しで実践する手順は **[docs/guide/demo-runbook.md](docs/guide/demo-runbook.md)(実践ガイド)** を参照。
 - **[docs/design/](docs/design/)** — 設計・判断根拠。なぜその構成にしたか。
 
 **構成要素(building-blocks)** — エージェントが安全に動く土台:

@@ -142,6 +142,25 @@ IRIS に格納。エージェントは1つ(`Demo.Agent.Teacher`、プレイン�
 > **実行基盤ロール `Demo_Runtime`** を別に作り、各デモユーザへ「アプリロール + Demo_Runtime」の2本立てで付与した。
 > 「動かせる土台」と「何を見せるか(アプリ権限)」を層で分けるのは、そのままハーネスの設計思想でもある。
 
+#### 「取れる行動」の差(ディスカバリだけでなく実行で示す)
+
+`Demo.Teacher.RunAs.CompareActions()` は、各ユーザ identity で `GetAnswerKey` / `RecordScore` を
+**実際に実行**する(`%AI.ToolMgr.ExecuteTool(name, args)`)。
+
+- **受講者(learner01)**: `%CanList` がカタログから除外済みのため、実行しても `ToolNotFound`(=そもそも
+  呼べない)。**ディスカバリゲートが一次防御**として機能し、実行ゲート `%CanExecute` はその後段の二重防御。
+- **監査者(auditor01)**: `GetAnswerKey` が模範解答を返し、`RecordScore` が Progress 行を実際に書き込む。
+  → **同じエージェント・同じツールセットでも identity で取れる行動が変わる**ことを実行結果で示せる。
+
+> **多層防御(実機で判明した設計上の要点)**: ツールの可視性/実行ゲート(RoleGuard)に加え、**SQL レベルの
+> 権限も揃える必要がある**。ツールの中身は `%SQL.Statement.%ExecDirect` で DB を読み書きするが、
+> `%DB_DEMO_DATA` 等の DB 権限は**オブジェクトアクセス**(`%OpenId`/`%Save`)にしか効かず、**SQL には
+> テーブル単位の GRANT が別途要る**。そこで `Demo.Teacher.Security.GrantSql()` が受講者ロールへ教材
+> (規程・設問)の `SELECT` のみ、監査者ロールへ模範解答・進捗の `SELECT`/`INSERT` を付与する。これにより
+> **受講者はツール経由でも SQL からも模範解答を読めない**(ツール層 × SQL 層の多層防御)。
+> ベクトル索引 `Demo_Teacher.PolicyVec` は `Setup.BuildIndex` で後から作られるため、GrantSql の対象外
+> (エージェントを受講者 identity で走らせて SearchPolicy まで実行する場合は別途 SELECT が要る)。
+
 ### ② trajectory(軌跡)の取得と可視化(見どころ)
 
 **実機で判明した粒度(重要)**: `Run(session, goal, maxIterations, callbackOref)` は**外側ループ**で、
