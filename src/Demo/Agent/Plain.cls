@@ -49,4 +49,42 @@ ClassMethod RunOnce(input As %String = "自己紹介して") As %Status
 	return $$$OK
 }
 
+/// 対話モード: session を1つ作り、入力ごとに Chat を回して会話を続ける。
+/// session が履歴を保持するので、前のやり取りを踏まえた応答になる。
+/// `quit`(または空行)で終了。日本語表示のため `-it` で入ったセッションで実行する。
+///
+///   DEMO> do ##class(Demo.Agent.Plain).Talk()
+ClassMethod Talk() As %Status
+{
+	try {
+		set agent = ..%New()
+		do agent.%Init()
+		set session = agent.CreateSession()
+		write "=== プレインエージェント 対話モード ===",!
+		write "メッセージを入力してください(quit または空行で終了)。",!
+		for {
+			write !,"あなた> "
+			read input
+			if (input="")||($zconvert(input,"L")="quit")||($zconvert(input,"L")="exit") { quit }
+			set response = agent.Chat(session, input)
+			write !,"エージェント> ",!
+			do ..Say(response.Content)
+			write !
+		}
+		write !,"=== 終了 ===",!
+	} catch ex {
+		write "エラー: ",ex.DisplayString(),!
+		return ex.AsStatus()
+	}
+	return $$$OK
+}
+
+/// 改行を CRLF に正規化して書き出す(TTY で LF だけだと行頭に戻らず段組みがずれるため)。
+ClassMethod Say(text As %String) [ Private ]
+{
+	set text = $replace(text, $char(13, 10), $char(10))
+	set text = $replace(text, $char(10), $char(13, 10))
+	write text
+}
+
 }

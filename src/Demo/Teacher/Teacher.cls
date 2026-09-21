@@ -75,11 +75,50 @@ ClassMethod RunLesson(goal As %String = "『情報持ち出し』の社内規程
     Return $$$OK
 }
 
+/// 対話モード: session を1つ作り、入力ごとに Run(ツール呼び出し・権限ゲート・ベクトル検索)を回す。
+/// session が履歴を保持するので前のやり取りを踏まえた応答になり、毎ターン当該分の trajectory を表示する。
+/// 実行者のロール(RBAC)で見える・使えるツールが変わる点は RunLesson と同じ。
+/// `quit`(または空行)で終了。日本語表示のため `-it` で入ったセッションで実行する。
+///
+///   DEMO> do ##class(Demo.Teacher.Teacher).Talk()
+ClassMethod Talk(maxIterations As %Integer = 6) As %Status
+{
+    Try {
+        Set agent = ..%New()
+        Set sc = agent.%Init()
+        If $$$ISERR(sc) Return sc
+        Set session = agent.CreateSession()
+        Write "=== 先生エージェント 対話モード ===", !
+        Write "質問を入力してください(quit または空行で終了)。毎ターン trajectory を表示します。", !
+        For {
+            Write !, "あなた> "
+            Read goal
+            If (goal="")||($ZConvert(goal,"L")="quit")||($ZConvert(goal,"L")="exit") { Quit }
+            // このターンで追加されるメッセージの開始位置(trajectory を当該分だけ描くため)。
+            Set from = session.MessageCount()
+            Set monitor = ##class(Demo.Teacher.Monitor).%New()
+            Set response = agent.Run(session, goal, maxIterations, monitor)
+            Do ..ShowTrajectory(session, from)
+            Write "=== 応答 ===", !
+            Do ..Say(response.Content)
+            Write !
+            Set st = session.GetStats()
+            Write "=== 集計 ===", !, "ツール呼び出し 累計 ", st."total_tool_calls", " 回 / 累計トークン ", st."total_prompt_tokens" + st."total_completion_tokens", !
+        }
+        Write !, "=== 終了 ===", !
+    } Catch ex {
+        Write "エラー: ", ex.DisplayString(), !
+        Return ex.AsStatus()
+    }
+    Return $$$OK
+}
+
 /// セッションの会話履歴から trajectory(質問→判断→ツール呼び出し→ツール結果→回答)を描く。
-ClassMethod ShowTrajectory(session As %AI.Agent.Session) As %Status
+/// from を指定すると、その位置以降のメッセージだけを描く(対話モードで当該ターン分だけ出すため)。
+ClassMethod ShowTrajectory(session As %AI.Agent.Session, from As %Integer = 0) As %Status
 {
     Write "=== trajectory(思考と行動の連鎖)===", !
-    For i = 0:1:session.MessageCount()-1 {
+    For i = from:1:session.MessageCount()-1 {
         Set m = session.GetMessage(i)
         Set role = m.role
         If role = "user" {
