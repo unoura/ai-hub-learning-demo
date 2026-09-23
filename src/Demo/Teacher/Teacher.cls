@@ -180,7 +180,8 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
             Read goal
             // 貼り付け等で前後に空白が混じっても /trace・quit 等のコマンドが効くよう正規化する。
             Set goal = $ZStrip(goal, "<>W")
-            If (goal="")||($ZConvert(goal,"L")="quit")||($ZConvert(goal,"L")="exit") { Quit }
+            // 他のコマンド(/trace・/help)に合わせて /quit・/exit でも終了できるようにする。
+            If (goal="")||$ListFind($ListBuild("quit","exit","/quit","/exit"), $ZConvert(goal,"L")) { Quit }
             // /trace: 直前の応答の軌跡(思考と行動の連鎖)と集計を表示する。
             If $ZConvert(goal,"L")="/trace" {
                 If lastFrom<0 {
@@ -194,7 +195,7 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
             }
             // /help: 使えるコマンドを表示する。
             If $ZConvert(goal,"L")="/help" {
-                Write "  コマンド: /trace=直前の応答の軌跡と集計を表示 / /help=このヘルプ / quit(または空行)=終了", !
+                Write "  コマンド: /trace=直前の応答の軌跡と集計を表示 / /help=このヘルプ / quit・/quit(または空行)=終了", !
                 Continue
             }
             // このターンで追加されるメッセージの開始位置(/trace で当該分だけ描くため)。

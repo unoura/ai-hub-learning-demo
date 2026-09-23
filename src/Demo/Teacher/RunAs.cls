@@ -202,8 +202,8 @@ ClassMethod RunLessonAs(username As %String, goal As %String = "『情報持ち�
 /// 対話は端末入力(READ)を伴うため、RunLessonAs のような JOB 子プロセスにできない
 /// (子は端末を読めない)。そこで **現プロセスで**「特権のうちに %Init(LLM キー解決)→
 /// Security.Login(user)→ 対話ループ(session はログイン後に作成=可視ツールを当該ロールで絞る)」
-/// を行う。**注意**: Security.Login は取消不可。TalkAs 終了後このセッションは指定ユーザのまま。
-/// 別ロールで試すには **セッションを開き直す**(reconnect)こと。
+/// を行う。**注意**: Security.Login は取消不可。デモユーザは %Development を持たず DEMO> へ戻れないので、
+/// 対話終了時にセッションを閉じる(Halt)。別ロールで試すには **セッションを開き直す**(reconnect)こと。
 ///
 /// 入口で**パスワードを非表示(伏せ字)で尋ねる**。プラットフォームの認証(Security.Login)が
 /// 実際に走ることを利用者に見せるのが狙い。デモの共通パスワードは "demo"(SetupRBAC で設定)。
@@ -233,7 +233,11 @@ ClassMethod TalkAs(username As %String, maxIterations As %Integer = 6) As %Statu
         Return $$$ERROR($$$GeneralError, "ログイン失敗: " _ username)
     }
     Write "ログインしました。=== ", username, " として対話 (roles=", $Roles, ") ===", !
-    Return ##class(Demo.Teacher.Teacher).TalkWith(agent, maxIterations)
+    Do ##class(Demo.Teacher.Teacher).TalkWith(agent, maxIterations)
+    // 3) Login は取消不可で、デモユーザは %Development を持たないため DEMO> プロンプトへは戻れない
+    //    (戻ると IRIS が "Access Denied" を出して切断する)。理由を示して明示的にセッションを閉じる。
+    Write "(", username, " のままではターミナルのプロンプトに戻れないため、セッション自体を終了します。)", !
+    Halt
 }
 
 /// 子プロセス:先生エージェントの会話を実行し、その出力を一時ファイルへ捕捉する。

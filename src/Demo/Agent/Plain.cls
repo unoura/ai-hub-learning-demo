@@ -65,7 +65,8 @@ ClassMethod Talk() As %Status
 		for {
 			write !,"あなた> "
 			read input
-			if (input="")||($zconvert(input,"L")="quit")||($zconvert(input,"L")="exit") { quit }
+			set input = $zstrip(input,"<>W")
+			if (input="")||$listfind($listbuild("quit","exit","/quit","/exit"),$zconvert(input,"L")) { quit }
 			set response = agent.Chat(session, input)
 			write !,"エージェント> ",!
 			do ..Say(response.Content)
