@@ -3,8 +3,9 @@
 > 本ドキュメントは**シナリオ設計と実現方式の確定**が目的。
 > 聴衆向け手順は後日 `docs/guide/agents/teacher-agent.md`、実施記録は `local/worklog/agents/teacher-agent.md` に分ける(混ぜない)。
 >
-> **実装状況(2026-09-21 / 監査追加 2026-09-23)**: 第1段(教材データ + ベクトル検索)・第2段(権限制御 + ツール群 + trajectory + RunAs)・
-> 第3段(ペルソナ再設計)・第6段(永続監査 `%AI.Policy.Audit`)とも **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は
+> **実装状況(2026-09-21 / 監査・承認追加 2026-09-23)**: 第1段(教材データ + ベクトル検索)・第2段(権限制御 + ツール群 + trajectory + RunAs)・
+> 第3段(ペルソナ再設計)・第6段(永続監査 `%AI.Policy.Audit`)・第7段(人手承認・フィードバック human-in-the-loop)とも
+> **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は
 > `Demo.Teacher.*` パッケージに収めた(当初スケッチの `Demo.Policy.*` / `Demo.ToolSet.*` / `Demo.RunAs` は下記の実クラス名で置き換わる)。
 
 > ---
@@ -119,6 +120,42 @@
 >   「起きたツール実行の証跡」と位置づけ、trajectory(過程)と補完関係にある。
 > - 見せ方: `Demo.Teacher.RunAs.ShowAudit(n)`(直近 n 件を「誰が・成否・ツール・所要 ms・引数」で表示)/
 >   `ClearAudit()`(証跡なので `Setup.Rebuild()` では消さず、独立メソッドで消去)。
+>
+> ### 人手承認・フィードバック(human-in-the-loop)を採用(第7段で追加)
+>
+> **動機**: 設問管理者は規程から設問を**生成**して教材 DB に**書き込む**。生成物をそのまま登録するのではなく、
+> 「AI は生成、最終決定は人間」を土台側で担保したい。書き込みが起きる直前=`RegisterQuestion` の実行前を
+> 承認点にするのが自然(参考: `aihub-demo/AdmissionDemo` の `ConsoleApproval`。書き込み系ツールを承認で門番)。
+>
+> - **どこに入れるか**: 承認ゲートは **`RoleGuard`(既存の Authorization ポリシー)に集約**した。
+>   `%AI.ToolSet` は **Authorization スロットを1つしか持てない**ため、承認専用クラスを別立てにできない
+>   (RBAC 判定と同じクラスに1段足すのが素直)。`Parameter APPROVALTOOLS = "RegisterQuestion"`(部分一致・
+>   カンマ区切り)で承認対象を指定。採点(GradeMyAnswer)は毎回・低リスクなので対象外。
+> - **RBAC × 承認は別軸**: `%CanExecute` はまず (1) `resource` の USE 権限を確認し(RBAC = 誰が呼べるか)、
+>   通過した**あと**で (2) 承認対象なら人間に諮る(承認 = この一件を実行してよいか)。生徒には作問ツールが
+>   `%CanList` で見えないので、承認の出番もない。
+> - **フィードバック機構が肝(実機で検証)**: `%CanExecute` は `%Status` しか返せない。そこで人間の選択肢を
+>   3つにし、`Decide()` が `"APPROVE"` / `"REJECT"` / `"REVISE:<指示>"` を返す:
+>   - APPROVE → `$$$OK`(そのまま実行=登録)。
+>   - REJECT → `$$$ERROR($$$AICoreToolAccessDenied, "…却下されました…")`(登録しない)。
+>   - REVISE → **人間の指示を AccessDenied のエラーテキストに埋め込んで**拒否する。エージェントループは
+>     これを「ツール失敗の理由」として LLM に返し、**LLM は指示を読んで設問を作り直し、改めて
+>     `RegisterQuestion` を呼ぶ**(承認されるまで往復)。Teacher.INSTRUCTIONS の設問管理者節に
+>     「差し戻し文言=拒否ではなく修正指示。作り直して再登録せよ」を明記して LLM の解釈を固定した。
+>   - **実機検証**: `TalkAs(qadmin01)` で「もっと難しい応用レベルにして、NG 例に Password123 を入れて」と
+>     差し戻し → LLM が指示を反映して作り直し → 再度承認要求 → y で登録。ツール呼び出し3回、監査に残るのは
+>     **承認・実行された1件だけ**(差し戻された試行は実行に入らないため監査に出ない)。
+> - **承認には端末が要る**: プロンプトは `%Library.Prompt.GetString` で1行受ける(`Include %syPrompt`、
+>   成功は `$$$SuccessResponse`)。y/yes/はい=承認、空行/n/no/いいえ=却下、それ以外=差し戻し指示。
+>   端末を持つのは対話 `TalkAs`(在プロセス)だけ。単発 `RunLessonAs`(JOB 子=端末なし、`$Principal="/dev/null"`)は
+>   **非対話のため自動承認**し注記を出す(承認の実演は `TalkAs` に役割分担)。
+> - **テスト/決定的動作**: プロセス内グローバル `^||Demo.Teacher.Approval` を最優先で参照する
+>   (連番添字でキュー化でき revise→approve の往復も再現。1=承認 / 0=却下 / 他文字列=差し戻し指示)。
+>   `^||`(プロセス私有)は JOB 子に伝播しないため、フィードバックループの自動テストは **RunLesson を特権
+>   プロセス内で回す**(RunLessonAs の JOB 子では不可)ことで実施した。
+> - **正直な位置づけ**: 承認ゲートは `%CanExecute` が唯一の実行門で、差し戻しは「実行拒否+指示の伝達」を
+>   1つのエラーで兼ねる簡素な方式。より厳密には承認待ちキュー/非同期承認(別 UI で承認)も設計できるが、
+>   デモは「土台側で書き込みを人間が承認し、指示で AI に作り直させる」1周を最短で見せることを優先した。
 >
 > ### ビルド時の注意(第4段で判明・恒久対策済み)
 >
@@ -414,7 +451,8 @@ Class Demo.Teacher.Monitor Extends %RegisteredObject   // 基底クラス不要�
 | 簡易的措置 | 内容 | 本番向け |
 |---|---|---|
 | identity | 起動時に受講者/監査ユーザを作成し `JOB` 子で `Security.Login` | 既存 IdP(LDAP/OAuth/Delegated 認証)に接続、Web/REST の認証済みコンテキストで実行 |
-| ポリシー | 1クラス `RoleGuard` に `%CanList`/`%CanExecute` を集約 | リソース/ロール設計を組織の RBAC に合わせ、`%AI.Policy.Discovery` で動的カタログ整形も検討 |
+| ポリシー | 1クラス `RoleGuard` に `%CanList`/`%CanExecute`(+ 書き込み系の人手承認)を集約 | リソース/ロール設計を組織の RBAC に合わせ、`%AI.Policy.Discovery` で動的カタログ整形も検討 |
+| 人手承認 | `%CanExecute` で書き込み系を止め、承認/却下/フィードバックを端末で1行入力(`RunLessonAs` は自動承認) | 承認待ちキュー/非同期承認(別 UI・別担当者)、承認記録の監査、差し戻し理由の構造化 |
 | 監査 | trajectory(session 再構成)+ **永続監査 `%AI.Policy.Audit`(採用済み)** = `Demo.Teacher.Audit.ToolCallLog` に DB 永続化 | 監査ログを SIEM 連携。保持期間/改ざん防止、拒否イベントの記録も認可ポリシー側で拡張 |
 | 埋め込み | FastEmbed(384次元、ローカル) | 用途に応じ高次元モデル / OpenAI 埋め込み(Wallet 再利用)、再インデックス運用 |
 | 教材量 | ポリシー数条 + 練習問題数問 | 実ドキュメント群を `AddDocument`/`ReindexDocument` で継続投入 |
