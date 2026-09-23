@@ -11,18 +11,18 @@ Include %occStatus
 ///
 /// 実演:
 ///   >>> do ##class(Demo.Teacher.RunAs).Compare()
-///   learner01 は GetHint のみ、auditor01 は 4 ツール全て見える、という差が出る。
+///   student01 は GradeMyAnswer / ShowReportCard、qadmin01 は RegisterQuestion、と見えるツールが割れる。
 Class Demo.Teacher.RunAs
 {
 
-/// 受講者(learner01)と監査者(auditor01)の見えるツールを並べて表示する。
+/// 生徒(student01)と設問管理者(qadmin01)の見えるツールを並べて表示する。
 ClassMethod Compare(pwd As %String = "SecDemo!2026") As %Status
 {
     Write "=== RunAs: ロール別のツールディスカバリ ===", !
-    Do ..ShowToolsFor("learner01", pwd)
-    Do ..ShowToolsFor("auditor01", pwd)
+    Do ..ShowToolsFor("student01", pwd)
+    Do ..ShowToolsFor("qadmin01", pwd)
     Write "----", !
-    Write "受講者には監査・採点ツールがそもそも見えない(%CanList で除外)。", !
+    Write "生徒には作問ツールが、設問管理者には採点・成績ツールが、そもそも見えない(%CanList で除外)。", !
     Return $$$OK
 }
 
@@ -55,21 +55,22 @@ ClassMethod ShowToolsFor(username As %String, pwd As %String = "SecDemo!2026") A
     Return $$$OK
 }
 
-/// 「取れる行動」の権限差を実演する。各ユーザの identity で GetAnswerKey / RecordScore を
-/// 実際に実行し、監査者だけが成功する(受講者は %CanExecute で拒否される)ことを示す。
+/// 「取れる行動」の権限差を実演する。各ユーザの identity で GradeMyAnswer(採点)/
+/// RegisterQuestion(作問)を実際に実行し、生徒は採点だけ・設問管理者は作問だけ成功する
+/// (もう一方は %CanList でカタログに無い)ことを示す。
 ///
 ///   >>> do ##class(Demo.Teacher.RunAs).CompareActions()
 ClassMethod CompareActions(pwd As %String = "SecDemo!2026") As %Status
 {
     Write "=== RunAs: ロール別の「取れる行動」 ===", !
-    Do ..ShowActionsFor("learner01", pwd)
-    Do ..ShowActionsFor("auditor01", pwd)
+    Do ..ShowActionsFor("student01", pwd)
+    Do ..ShowActionsFor("qadmin01", pwd)
     Write "----", !
-    Write "同じツール呼び出しでも、監査者だけが模範解答の参照・採点を実行できる(実行ゲート %CanExecute)。", !
+    Write "採点(GradeMyAnswer)は生徒だけ、作問(RegisterQuestion)は設問管理者だけが実行できる。", !
     Return $$$OK
 }
 
-/// 指定ユーザの権限で監査系ツールを実行し、成否を表示する。
+/// 指定ユーザの権限で採点/作問ツールを実行し、成否を表示する。
 ClassMethod ShowActionsFor(username As %String, pwd As %String = "SecDemo!2026") As %Status
 {
     Set outfile = "/tmp/runas_act_" _ username _ ".json"
@@ -89,12 +90,12 @@ ClassMethod ShowActionsFor(username As %String, pwd As %String = "SecDemo!2026")
         Return $$$OK
     }
     Write username, "(", res.roles, ")が取れる行動:", !
-    Write "  GetAnswerKey(模範解答) → ", res.answerKey, !
-    Write "  RecordScore(採点)      → ", res.recordScore, !
+    Write "  GradeMyAnswer(採点)    → ", res.grade, !
+    Write "  RegisterQuestion(作問) → ", res.register, !
     Return $$$OK
 }
 
-/// 子プロセス:デモユーザにログインして監査系ツールを実行し、結果を JSON でファイルに書く。
+/// 子プロセス:デモユーザにログインして採点/作問ツールを実行し、結果を JSON でファイルに書く。
 ClassMethod ActionChild(username As %String, pwd As %String, outfile As %String)
 {
     Try {
@@ -107,8 +108,8 @@ ClassMethod ActionChild(username As %String, pwd As %String, outfile As %String)
         Set out.roles = $Roles
         Set mgr = ##class(%AI.ToolMgr).%New()
         Do mgr.RegisterToolSet("Demo.Teacher.ToolSet")
-        Set out.answerKey = ..TryTool(mgr, "GetAnswerKey", {"questionId": 1})
-        Set out.recordScore = ..TryTool(mgr, "RecordScore", {"learner": (username), "questionId": 1, "score": 80, "comment": "RunAs デモ"})
+        Set out.grade = ..TryTool(mgr, "GradeMyAnswer", {"questionId": 1, "answer": "12文字以上、記号を混ぜる、使い回さない"})
+        Set out.register = ..TryTool(mgr, "RegisterQuestion", {"category": "メール", "prompt": "(RunAsデモ)不審メールで最初にすべきことは?", "modelAnswer": "開かず窓口へ報告", "rubric": "報告が含まれれば可", "keyPoints": "報告=報告|連絡|窓口"})
         Do ..WriteFile(outfile, out.%ToJSON())
     } Catch ex {
         Do ..WriteFile(outfile, {"error": ($ZConvert(ex.DisplayString(), "O", "JSON"))}.%ToJSON())
@@ -134,11 +135,11 @@ ClassMethod TryTool(mgr As %AI.ToolMgr, name As %String, args As %DynamicObject)
 }
 
 /// 指定ユーザの identity で先生エージェントの会話(RunLesson)を丸ごと実行する。
-/// 同じゴールを learner01(生徒)/ auditor01(先生=監査者)で投げると、呼べるツールが
-/// 権限で変わる様子が trajectory に出る(生徒は GetAnswerKey が見えない、等)。
+/// 同じゴールを student01(生徒)/ qadmin01(設問管理者)で投げると、呼べるツールが
+/// 権限で変わる様子が trajectory に出る(生徒は作問が、設問管理者は採点・成績が見えない)。
 ///
-///   >>> do ##class(Demo.Teacher.RunAs).RunLessonAs("auditor01", "この設問の模範解答を教えて")
-///   >>> do ##class(Demo.Teacher.RunAs).RunLessonAs("learner01", "情報持ち出しの社内規程を出典付きで教えて")
+///   >>> do ##class(Demo.Teacher.RunAs).RunLessonAs("student01", "設問1に『12文字以上、記号を混ぜる、使い回さない』と答えます。採点して。")
+///   >>> do ##class(Demo.Teacher.RunAs).RunLessonAs("qadmin01", "パスワード管理の規程から応用レベルの設問を1問作って登録して。")
 ClassMethod RunLessonAs(username As %String, goal As %String = "『情報持ち出し』の社内規程を調べて、出典付きで要点を教えて", pwd As %String = "SecDemo!2026") As %Status
 {
     Set outfile = "/tmp/runas_lesson_" _ username _ ".txt"
@@ -156,6 +157,36 @@ ClassMethod RunLessonAs(username As %String, goal As %String = "『情報持ち�
     }
     Do ..Emit(..ReadFile(outfile))
     Return $$$OK
+}
+
+/// 指定ユーザの identity で先生エージェントの「対話モード」を実行する。
+/// student01(生徒)/ qadmin01(設問管理者)で対話すると、生徒は採点・成績、設問管理者は
+/// 作問、と使えるツールが割れる様子を会話しながら見られる。
+///
+/// 対話は端末入力(READ)を伴うため、RunLessonAs のような JOB 子プロセスにできない
+/// (子は端末を読めない)。そこで **現プロセスで**「特権のうちに %Init(LLM キー解決)→
+/// Security.Login(user)→ 対話ループ(session はログイン後に作成=可視ツールを当該ロールで絞る)」
+/// を行う。**注意**: Security.Login は取消不可。TalkAs 終了後このセッションは指定ユーザのまま。
+/// 別ロールで試すには **セッションを開き直す**(reconnect)こと。
+///
+///   DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("student01")
+///   DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("qadmin01")
+ClassMethod TalkAs(username As %String, pwd As %String = "SecDemo!2026", maxIterations As %Integer = 6) As %Status
+{
+    // 1) 特権のうちに初期化(LLM シークレットをメモリ上の Provider へ解決)。
+    Set agent = ##class(Demo.Teacher.Teacher).%New()
+    Set sc = agent.%Init()
+    If $$$ISERR(sc) {
+        Write "初期化エラー: ", $System.Status.GetErrorText(sc), !
+        Return sc
+    }
+    // 2) デモユーザへ切替(不可逆)。以降のツール可視性/実行・教材 SQL はこのロールで判定。
+    If '$SYSTEM.Security.Login(username, pwd) {
+        Write "ログイン失敗: ", username, !
+        Return $$$ERROR($$$GeneralError, "ログイン失敗: " _ username)
+    }
+    Write "=== ", username, " として対話 (roles=", $Roles, ") ===", !
+    Return ##class(Demo.Teacher.Teacher).TalkWith(agent, maxIterations)
 }
 
 /// 子プロセス:先生エージェントの会話を実行し、その出力を一時ファイルへ捕捉する。

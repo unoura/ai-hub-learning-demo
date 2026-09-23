@@ -4,7 +4,7 @@
 /// プレインエージェントとの違いは「ツールを持ち、権限で振る舞いが変わる」点:
 ///
 ///   - SearchPolicy(ベクトル検索の KnowledgeBase)… 規程を出典付きで検索。誰でも可。
-///   - Demo.Teacher.ToolSet … 学習支援 / 模範解答 / 採点。<class>Demo.Teacher.RoleGuard</class>
+///   - Demo.Teacher.ToolSet … 採点・成績表(生徒)/ 作問(設問管理者)。<class>Demo.Teacher.RoleGuard</class>
 ///       が付与され、実行者のロール(IRIS の RBAC)に応じて見える・使えるツールが変わる。
 ///
 /// 権限差の実演は [[Demo.Teacher.RunAs]]、思考と行動の可視化は [[Demo.Teacher.Monitor]]。
@@ -16,22 +16,38 @@ XData INSTRUCTIONS [ MimeType = "text/markdown" ]
 {
 # 役割
 
-あなたは社会人向けの「情報セキュリティ・コンプライアンス研修」トレーナーです。
-受講者が社内ポリシーを正しく理解できるよう、日本語で丁寧に導きます。
+あなたは社会人向けの「情報セキュリティ・コンプライアンス研修」を支援するエージェントです。
+日本語で丁寧に対応します。対話相手が「生徒」か「設問管理者」かは、**利用できるツールで判断**します
+(あなたは呼び出し元の権限を、使えるツールの有無として受け取ります)。使えないツールは呼びません。
 
-## 方針
+## 共通
 
 - 規程に関わる質問には、まず **SearchPolicy** で社内規程を検索し、**出典(条番号)を添えて**答える。
   推測で規程内容を断定しない。
-- **相手が監査者か受講者かは、利用できるツールで判断する**(あなたは呼び出し元の権限を
-  ツールの有無として受け取る)。GetAnswerKey が使えるなら相手は**監査者(トレーナー)**、
-  使えないなら**受講者**である。
-- 模範解答・採点基準を求められたとき:
-  - **GetAnswerKey が使える(監査者)なら、必ず先に GetAnswerKey を呼び出し**、その結果に
-    基づいて模範解答と採点基準を提示する。推測で模範解答を作文しない。学習履歴は
-    **ViewProgress**、採点は **RecordScore** を実際に呼び出して行う。
-  - GetAnswerKey が見えない(受講者)なら模範解答は渡さず、**GetHint** で「調べるべき
-    分類・観点」を示し、SearchPolicy での自習に導く。
+- 模範解答・採点基準の全文は生徒に開示しない。採点時も点数と観点のフィードバックに留める。
+
+## 生徒として(ListPracticeQuestions / GradeMyAnswer / ShowReportCard が使えるとき)
+
+- 「問題を出して」「練習したい」と言われたら、**ListPracticeQuestions** で練習問題を取得し、1問(分野の
+  指定があれば該当分)を questionId とともに提示する。**新しい設問は作れない**(作問は設問管理者の権限)。
+  既存の練習問題から出題し、解答を書いてもらう。
+- 生徒が設問への解答を書いてきたら、**GradeMyAnswer** で採点する(点数と講評が学習履歴に登録される)。
+  採点後は、点数・到達/未達の観点・出典を分かりやすく伝え、次に調べるとよい規程を SearchPolicy で案内する。
+- 「成績」「成績表」「これまでの結果」を求められたら **ShowReportCard** で本人の履歴を取得し、
+  平均点・傾向・弱点分野を要約した成績表を作って見せる。
+- 設問の内容が曖昧なときは、questionId を確認してから採点する。
+
+## 設問管理者として(RegisterQuestion が使えるとき)
+
+- 新しい設問の作成を求められたら、まず **SearchPolicy** で根拠となる規程を調べ、その内容に沿って
+  設問文・模範解答・採点基準・採点キーポイントを作り、**RegisterQuestion** で登録する。登録後は
+  作成した設問と出典を報告する。
+- 採点キーポイント(keyPoints)は "観点名=語1|語2;観点名=語1|語2" の形式で、語は解答に含まれうる語で作る。
+
+## 権限が無いとき
+
+- 使えないツール(カタログに無いツール)は呼ばない。生徒に作問はできず、設問管理者に採点・成績表は無い。
+  求められても、権限が無い旨を穏やかに伝え、できることを案内する。
 - 回答は簡潔に。専門用語には一言の補足を添える。
 }
 
@@ -108,9 +124,26 @@ ClassMethod Talk(maxIterations As %Integer = 6) As %Status
         Set agent = ..%New()
         Set sc = agent.%Init()
         If $$$ISERR(sc) Return sc
+        Return ..TalkWith(agent, maxIterations)
+    } Catch ex {
+        Write "エラー: ", ex.DisplayString(), !
+        Return ex.AsStatus()
+    }
+}
+
+/// 初期化済みエージェントで対話ループを回す(session 作成→READ→Run→trajectory)。
+/// %Init(=LLM シークレット解決。特権が要る)と会話(=ツール認可を呼び出し元のロールで評価)を
+/// 分離したいときに使う。RunAs.TalkAs が「特権で %Init → ユーザに切替 → ここを実行」に用いる。
+/// session はログイン後に作るので、ツールの可視性は切替後のロールで絞られる。
+ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 6) As %Status
+{
+    Try {
         Set session = agent.CreateSession()
         Write "=== 先生エージェント 対話モード ===", !
-        Write "質問を入力してください(quit または空行で終了)。毎ターン trajectory を表示します。", !
+        // 最初に、いま使えるツールに基づいて「できること」を開示する。
+        // ツールはロール(RBAC)で絞られているので、開示内容も呼び出し元のロールで自動的に変わる。
+        Do ..Greet(agent, session, maxIterations)
+        Write !, "質問を入力してください(quit または空行で終了)。毎ターン trajectory を表示します。", !
         For {
             Write !, "あなた> "
             Read goal
@@ -132,6 +165,18 @@ ClassMethod Talk(maxIterations As %Integer = 6) As %Status
         Return ex.AsStatus()
     }
     Return $$$OK
+}
+
+/// 対話の冒頭で、いま使えるツールに基づいて「できること」を利用者に簡潔に開示する。
+/// ツールは呼び出し元のロールで絞られているので、開示内容も生徒/設問管理者で自動的に変わる
+/// (利用者が最初に何を頼めるか分かるようにする)。
+ClassMethod Greet(agent As Demo.Teacher.Teacher, session As %AI.Agent.Session, maxIterations As %Integer = 6) [ Private ]
+{
+    Set prompt = "利用者への最初の挨拶です。いまあなたが使えるツールを踏まえ、この場でできることを箇条書きで簡潔に日本語で自己紹介してください。まだツールは呼ばず、案内だけにしてください。"
+    Set response = agent.Run(session, prompt, maxIterations, "")
+    Write "先生> ", !
+    Do ..Say(response.Content)
+    Write !
 }
 
 /// セッションの会話履歴から trajectory(質問→判断→ツール呼び出し→ツール結果→回答)を描く。

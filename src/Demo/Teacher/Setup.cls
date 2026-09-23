@@ -27,7 +27,9 @@ ClassMethod Rebuild() As %Status
     If $$$ISERR(sc) Return sc
     Set sc = ..BuildIndex()
     If $$$ISERR(sc) Return sc
-    Write "[setup] 完了: 規程 ", ..CountOf("Demo_Teacher.Policy"), " 件 / 設問 ", ..CountOf("Demo_Teacher.Question"), " 件 をインデックス化しました。", !
+    Set sc = ..SeedProgress()
+    If $$$ISERR(sc) Return sc
+    Write "[setup] 完了: 規程 ", ..CountOf("Demo_Teacher.Policy"), " 件 / 設問 ", ..CountOf("Demo_Teacher.Question"), " 件 をインデックス化し、成績表デモ用の履歴 ", ..CountOf("Demo_Teacher.Progress"), " 件を投入しました。", !
     Return $$$OK
 }
 
@@ -81,12 +83,13 @@ ClassMethod LoadSampleData() As %Status
         If $$$ISERR(sc) Return sc
     }
 
-    // Category ^ Prompt ^ ModelAnswer ^ Rubric
+    // Category ^ Prompt ^ ModelAnswer ^ Rubric ^ KeyPoints
+    // KeyPoints は自動採点用。"観点名=語1|語2;観点名=語1|語2"(観点は ";"、同義語は "|" 区切り)。
     Set quizzes = $ListBuild(
-        $ListBuild("パスワード管理", "安全なパスワードの要件を3つ挙げてください。", "12文字以上であること / 英大文字・小文字・数字・記号を混在させ他サービスと使い回さないこと / 多要素認証(MFA)を併用すること。", "3要件それぞれ1点。文字数・複雑さ・使い回し禁止・MFAのうち3つ挙げていれば満点。"),
-        $ListBuild("情報持ち出し", "在宅勤務で顧客データを扱う際の注意点を述べてください。", "USB等での持ち出しは原則禁止。やむを得ない場合は上長承認と暗号化を行う。私物端末に機密データを保存しない。", "承認/暗号化/私物端末禁止 の観点を各1点で評価。"),
-        $ListBuild("インシデント", "不審メールの添付ファイルを誤って開いてしまいました。最初にすべきことは?", "自己判断で対処・隠蔽せず、直ちに情報システム部門/セキュリティ窓口へ報告する。", "『速やかに報告』『隠蔽しない』が含まれれば正答。個別の技術対処は加点要素。"),
-        $ListBuild("コンプライアンス", "取引先から高額な贈答を受けそうな場合の対応は?", "社会通念上の範囲を超える贈答は受けず、一定金額を超える場合は事前申告と承認を得る。利益相反の懸念があれば申告する。", "事前申告・承認、利益相反申告の観点を評価。"))
+        $ListBuild("パスワード管理", "安全なパスワードの要件を3つ挙げてください。", "12文字以上であること / 英大文字・小文字・数字・記号を混在させ他サービスと使い回さないこと / 多要素認証(MFA)を併用すること。", "3要件それぞれ1点。文字数・複雑さ・使い回し禁止・MFAのうち3つ挙げていれば満点。", "文字数=12文字|12 文字|文字数|長さ;複雑さ=記号|大文字|小文字|数字|複雑|文字種|混在;使い回し・MFA=使い回|使いまわ|MFA|多要素|二要素|ワンタイム"),
+        $ListBuild("情報持ち出し", "在宅勤務で顧客データを扱う際の注意点を述べてください。", "USB等での持ち出しは原則禁止。やむを得ない場合は上長承認と暗号化を行う。私物端末に機密データを保存しない。", "承認/暗号化/私物端末禁止 の観点を各1点で評価。", "承認=承認|上長|上司|許可;暗号化=暗号化|暗号;私物端末禁止=私物|個人端末|個人のPC|自分の端末"),
+        $ListBuild("インシデント", "不審メールの添付ファイルを誤って開いてしまいました。最初にすべきことは?", "自己判断で対処・隠蔽せず、直ちに情報システム部門/セキュリティ窓口へ報告する。", "『速やかに報告』『隠蔽しない』が含まれれば正答。個別の技術対処は加点要素。", "速やかに報告=報告|連絡|窓口|情報システム|速やか|直ち;隠さない=隠さ|隠蔽しない|自己判断しない"),
+        $ListBuild("コンプライアンス", "取引先から高額な贈答を受けそうな場合の対応は?", "社会通念上の範囲を超える贈答は受けず、一定金額を超える場合は事前申告と承認を得る。利益相反の懸念があれば申告する。", "事前申告・承認、利益相反申告の観点を評価。", "事前申告・承認=申告|承認|事前|届け出;利益相反=利益相反|範囲を超え|社会通念|受けない"))
 
     For i = 1:1:$ListLength(quizzes) {
         Set row = $List(quizzes, i)
@@ -99,7 +102,36 @@ ClassMethod LoadSampleData() As %Status
         Set a.Question = q
         Set a.ModelAnswer = $ListGet(row, 3)
         Set a.Rubric = $ListGet(row, 4)
+        Set a.KeyPoints = $ListGet(row, 5)
         Set sc = a.%Save()
+        If $$$ISERR(sc) Return sc
+    }
+    Return $$$OK
+}
+
+/// 成績表デモ用の初期履歴を投入する(生徒 student01)。
+/// ShowReportCard が「直近10件」から平均・傾向を要約できるよう、複数設問・点数の履歴を作る。
+/// Learner はユーザ名の文字列で、student01 が未作成でも投入できる(採点履歴はユーザ実体に依存しない)。
+ClassMethod SeedProgress() As %Status
+{
+    // questionId ^ score ^ comment
+    Set rows = $ListBuild(
+        $ListBuild(1, 100, "100点(3/3 観点)。到達: 文字数, 複雑さ, 使い回し・MFA。出典: 情報セキュリティ規程 第12条。"),
+        $ListBuild(2, 67, "67点(2/3 観点)。到達: 承認, 暗号化。未達: 私物端末禁止。出典: 情報管理規程 第7条。"),
+        $ListBuild(3, 100, "100点(2/2 観点)。到達: 速やかに報告, 隠さない。出典: 情報セキュリティ規程 第25条。"),
+        $ListBuild(4, 50, "50点(1/2 観点)。到達: 事前申告・承認。未達: 利益相反。出典: コンプライアンス規程 第9条。"),
+        $ListBuild(1, 67, "67点(2/3 観点)。到達: 文字数, 複雑さ。未達: 使い回し・MFA。出典: 情報セキュリティ規程 第12条。"),
+        $ListBuild(3, 100, "100点(2/2 観点)。到達: 速やかに報告, 隠さない。出典: 情報セキュリティ規程 第25条。"))
+    For i = 1:1:$ListLength(rows) {
+        Set row = $List(rows, i)
+        Set q = ##class(Demo.Teacher.Question).%OpenId($ListGet(row, 1))
+        If '$IsObject(q) Continue
+        Set p = ##class(Demo.Teacher.Progress).%New()
+        Set p.Learner = "student01"
+        Set p.Question = q
+        Set p.Score = $ListGet(row, 2)
+        Set p.Comment = $ListGet(row, 3)
+        Set sc = p.%Save()
         If $$$ISERR(sc) Return sc
     }
     Return $$$OK

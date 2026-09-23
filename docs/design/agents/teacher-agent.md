@@ -3,9 +3,85 @@
 > 本ドキュメントは**シナリオ設計と実現方式の確定**が目的。
 > 聴衆向け手順は後日 `docs/guide/agents/teacher-agent.md`、実施記録は `local/worklog/agents/teacher-agent.md` に分ける(混ぜない)。
 >
-> **実装状況(2026-09-21)**: 第1段(教材データ + ベクトル検索)・第2段(権限制御 + ツール群 + trajectory + RunAs)とも
-> **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は `Demo.Teacher.*`
-> パッケージに収めた(当初スケッチの `Demo.Policy.*` / `Demo.ToolSet.*` / `Demo.RunAs` は下記の実クラス名で置き換わる)。
+> **実装状況(2026-09-21)**: 第1段(教材データ + ベクトル検索)・第2段(権限制御 + ツール群 + trajectory + RunAs)・
+> 第3段(ペルソナ再設計)とも **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は
+> `Demo.Teacher.*` パッケージに収めた(当初スケッチの `Demo.Policy.*` / `Demo.ToolSet.*` / `Demo.RunAs` は下記の実クラス名で置き換わる)。
+
+> ---
+> ## 第3段: ペルソナ再設計(受講者/監査者 → 生徒/設問管理者)(ユーザ確定・実装済み 2026-09-21)
+>
+> **動機**: エージェンティック AI の見どころは「自律的な情報取得」だけでない。**要約・生成・情報登録**という
+> LLM ならではの働きを、権限で封じ込めつつ見せたい。そこでペルソナを実務に即した2役に組み替えた。
+>
+> **本文の①②③(権限ディスカバリ / trajectory / ベクトル検索)の機構は変更なし**。変わったのは
+> ペルソナ・リソース・ロール・ツール構成・データモデルと、多層防御の当て方(下記)。以降の旧記述
+> (受講者/監査者、`Demo_LearnRead`/`Demo_AnswerKey`/`Demo_Grade`、`GetHint`/`GetAnswerKey`/`ViewProgress`/`RecordScore`)
+> は**この節が優先**する。
+>
+> ### ペルソナ / リソース / ロール / ユーザ
+>
+> | ペルソナ | ユーザ | アプリロール | リソース | できること |
+> |---|---|---|---|---|
+> | 生徒 | `student01` | `Demo_Student` | `Demo_Study` | 自分の解答の採点、自分の成績表閲覧 |
+> | 設問管理者 | `qadmin01` | `Demo_QuestionAdmin` | `Demo_Authoring` | 規程を基にした設問の作成・登録 |
+>
+> 実行基盤ロール `Demo_Runtime`(DB 権限)は第2段と同じく共有。採点・成績と作問は**ほぼ排他**の権限。
+>
+> ### ツール構成(2クラス + 共通の SearchPolicy)
+>
+> | クラス | ツール | 要件リソース | 働き |
+> |---|---|---|---|
+> | `Demo.Teacher.Tools.Study` | `ListPracticeQuestions` | `Demo_Study`(生徒) | 既存の練習問題(questionId/category/prompt/difficulty)を返す=生徒への**出題**。模範解答・採点基準は返さない。生徒は新規作問できない(作問は設問管理者権限)ため、既存問題から出題する |
+> | `Demo.Teacher.Tools.Study` | `GradeMyAnswer` | `Demo_Study`(生徒) | 解答を採点し点数+講評を Progress に登録。**採点はサーバ側で** AnswerKey の採点キーポイントと語句照合して算出(自己申告不可)。返り値は点数・到達/未達観点・出典のみ(模範解答/採点基準は返さない) |
+> | `Demo.Teacher.Tools.Study` | `ShowReportCard` | `Demo_Study`(生徒) | 本人の直近10件(`Ts` 降順)を取得。エージェントが平均・傾向・弱点を**要約** |
+> | `Demo.Teacher.Tools.Authoring` | `RegisterQuestion` | `Demo_Authoring`(設問管理者) | エージェントが SearchPolicy を基に**生成**した設問・模範解答・採点基準・採点キーポイントを Question/AnswerKey に**登録** |
+> | `SearchPolicy`(KnowledgeBase) | — | なし(全員) | 規程のベクトル検索(第1段のまま) |
+>
+> 旧 `Tools.Learn`/`Tools.AnswerKey`/`Tools.Grade` は削除。ToolSet は Include を Study / Authoring の
+> 2クラスに置き換え、各 Include に `resource` 要件(`Demo_Study` / `Demo_Authoring`)を付ける。
+>
+> ### データモデルの変更
+>
+> - `Demo.Teacher.AnswerKey` に **`KeyPoints`(採点キーポイント)** を追加。書式 `"観点名=語1|語2;観点名=..."`
+>   (観点は `;`、同義語は `|` 区切り)。各観点にいずれかの語が解答に含まれれば「到達」とみなす。
+>   さらに **`Question` に一意インデックス `QIdx`** を付け、`QIdxOpen(questionId)` で採点基準を
+>   **オブジェクトアクセス**で開けるようにした(→ 下記の多層防御)。
+> - `Demo.Teacher.Progress` は `Ts`(既存)を「直近10件」の並び順に使う。`Learner` にはログインユーザ名が入る
+>   (採点は生徒本人の行動)。`Demo.Teacher.Setup.SeedProgress()` が成績表デモ用に student01 の履歴を数件投入。
+>
+> ### 多層防御の当て方(第2段から更新)
+>
+> - **採点基準(AnswerKey)は生徒に SQL SELECT を与えない**。`GradeMyAnswer` は `QIdxOpen`(オブジェクト
+>   アクセス=`%DB_DEMO_DATA` で動く)で採点基準を読むため採点は成立するが、**生徒は SQL からは採点基準を
+>   読めない**。採点はサーバ側で算出するので**点数の自己申告もできない**。
+> - 作問(Question/AnswerKey への書き込み)は**オブジェクトアクセス(`%Save`)**で行い、実行可否は
+>   **ツール層(RoleGuard = `Demo_Authoring` の USE)**で設問管理者に限定する。
+> - SQL GRANT(`Security.GrantSql`): 生徒 = Policy/Question/Progress の SELECT(AnswerKey は**与えない**)、
+>   設問管理者 = Policy/Question/AnswerKey の SELECT、共有 Demo_Runtime = PolicyVec の SELECT。
+>
+> ### 対話開始時の自己開示(第4段で追加)
+>
+> 対話モード(`Teacher.TalkWith` / `RunAs.TalkAs`)は、READ ループの**前に開始挨拶ターンを1回**実行し、
+> エージェントに「いまできること」を利用者へ開示させる(`Teacher.Greet`)。session はログイン後に作るので
+> **見えるツールは呼び出し元のロールで絞られており**、開示内容も生徒(出題・採点・成績表)/ 設問管理者(作問)で
+> 自動的に変わる。利用者が最初に何を頼めるか分かる=UX 改善であると同時に、「できることの開示」自体が
+> ハーネスの権限に沿う(見えないツールは案内もされない)。
+>
+> ### ビルド時の注意(第4段で判明・恒久対策済み)
+>
+> `$system.OBJ.Compile` は DB 上の既ロードクラスを再コンパイルするだけで `.cls` をディスク再読込しない
+> (編集反映には先に `LoadDir`/`Load` が要る)。さらに **`LoadDir` の一括処理では ToolSet の
+> ジェネレータ(`%Discover`/`%Invoke`)が Include ツールクラスより先に routine 生成され、古いツール一覧を
+> 拾って新ツールを静かに取りこぼす**ことがある(例: `ListPracticeQuestions` 追加が反映されない)。
+> → `docker/start.sh` は `LoadDir` の**直後に `Demo.Teacher.ToolSet` を単独で強制再コンパイル**
+> (`$system.OBJ.Compile("Demo.Teacher.ToolSet","ck")`、`u` 修飾子なし=up-to-date でもやり直す)して確定させる。
+> 手作業で src を再ロードするときも同じ順序を踏むこと。詳細は [[reference-ai-sdk-capabilities]]。
+>
+> ### 簡易的措置(第3段)
+>
+> - 採点は**語句照合**(サーバ側で完結し自己申告を防ぐのが主目的)。本番は意味照合/LLM 採点へ。
+> - 成績表の本人限定は各ツール内の `WHERE Learner=$Username`。本番は行レベルセキュリティで担保。
+> ---
 
 ## テーマと一言メッセージ
 
@@ -304,6 +380,9 @@ Class Demo.Teacher.Monitor Extends %RegisteredObject   // 基底クラス不要�
 3. identity 切替 = **JOB 子 + `$SYSTEM.Security.Login` の RunAs 方式**。
 4. 実装は段階的に進める。**第1段(教材データ + ベクトル検索)完了**(`Demo.Teacher.Policy/Question/AnswerKey/Setup`、
    `Demo_Teacher.PolicyVec`、SearchPolicy 検索の実機確認)。**第2段(権限制御 + ツール群 + trajectory + RunAs)完了**
-   (`Tools.Learn/AnswerKey/Grade`、`RoleGuard`、`ToolSet`、`Security`(RBAC)、`RunAs`、`Monitor`、`Teacher`、`Progress`。
+   (`RoleGuard`、`ToolSet`、`Security`(RBAC)、`RunAs`、`Monitor`、`Teacher`、`Progress`。
    RunAs で権限別ディスカバリ差、RunLesson で出典付き回答と trajectory を実機確認)。
-   聴衆向け `guide/agents/teacher-agent.md` 執筆済み(2026-09-21)。
+5. **第3段(ペルソナ再設計)完了(2026-09-21)**: ペルソナを **生徒(student01)/ 設問管理者(qadmin01)** に組み替え、
+   ツールを `Tools.Study`(GradeMyAnswer/ShowReportCard)/ `Tools.Authoring`(RegisterQuestion)に整理(旧 Learn/AnswerKey/Grade 削除)。
+   採点はサーバ側の語句照合、成績表は要約、作問は SearchPolicy→生成→登録。AnswerKey に KeyPoints 追加。
+   採点・成績・作問の3機能を両ペルソナで実機 end-to-end 検証(詳細は上記「第3段」節)。guide / demo-runbook を更新済み。

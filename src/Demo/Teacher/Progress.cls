@@ -1,10 +1,10 @@
-/// 受講者の学習履歴・スコア(個人情報)。ViewProgress で参照し、RecordScore が書き込む。
-/// 監査者(トレーナー)権限でのみ扱える実行時状態で、受講者エージェントからは
-/// ツールごと封じる(データ分離 × 権限ゲートの二重ガードの対象)。
+/// 生徒の学習履歴・スコア(個人情報)。GradeMyAnswer(採点)が書き込み、
+/// ShowReportCard(成績表)が本人分を参照する。採点は生徒本人の行動として記録され、
+/// Learner にはログインユーザ名が入る。成績表は Ts の新しい順に直近10件を見る。
 Class Demo.Teacher.Progress Extends %Persistent
 {
 
-/// 受講者の識別子(ユーザ名など)。
+/// 生徒の識別子(ログインユーザ名)。
 Property Learner As %String(MAXLEN = 100);
 
 /// 対象の設問。

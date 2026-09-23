@@ -24,6 +24,14 @@ set -e
  set sc=$system.OBJ.LoadDir("/home/irisowner/dev/src","ck",.err,1)
  write:'sc "[demo] src ロード失敗: "_$system.Status.GetErrorText(sc),!
  write:sc "[demo] src ロード完了",!
+ // ToolSet を単独で強制再コンパイル(u なし)。LoadDir の一括処理では ToolSet の
+ // ジェネレータが Include ツールクラスより先に生成され、古いツール一覧を拾って
+ // 新ツールを取りこぼすことがあるため(静かな失敗)。ここで確実に取り直す。
+ if ##class(%Dictionary.CompiledClass).%ExistsId("Demo.Teacher.ToolSet") {
+   set sc2=$system.OBJ.Compile("Demo.Teacher.ToolSet","ck")
+   write:'sc2 "[demo] ToolSet 再コンパイル失敗: "_$system.Status.GetErrorText(sc2),!
+   write:sc2 "[demo] ToolSet 再コンパイル完了(ツール一覧を確定)",!
+ }
  halt
 LOADSRC
 ) &
