@@ -113,7 +113,8 @@ ClassMethod RunLessonWith(agent As Demo.Teacher.Teacher, goal As %String, maxIte
 }
 
 /// 対話モード: session を1つ作り、入力ごとに Run(ツール呼び出し・権限ゲート・ベクトル検索)を回す。
-/// session が履歴を保持するので前のやり取りを踏まえた応答になり、毎ターン当該分の trajectory を表示する。
+/// session が履歴を保持するので前のやり取りを踏まえた応答になる。通常は応答だけを返し、`/trace` と
+/// 入力したときに直前の応答の軌跡(思考と行動の連鎖)と集計を表示する(`/help` でコマンド一覧)。
 /// 実行者のロール(RBAC)で見える・使えるツールが変わる点は RunLesson と同じ。
 /// `quit`(または空行)で終了。日本語表示のため `-it` で入ったセッションで実行する。
 ///
@@ -143,21 +144,39 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
         // 最初に、いま使えるツールに基づいて「できること」を開示する。
         // ツールはロール(RBAC)で絞られているので、開示内容も呼び出し元のロールで自動的に変わる。
         Do ..Greet(agent, session, maxIterations)
-        Write !, "質問を入力してください(quit または空行で終了)。毎ターン trajectory を表示します。", !
+        Write !, "質問を入力してください。/trace=直前の応答の軌跡と集計を表示 / /help=ヘルプ / quit(空行)=終了", !
+        // 直前ターンの trajectory 起点。/trace で当該ターン分だけ描くために覚えておく(-1=未実行)。
+        Set lastFrom = -1
         For {
             Write !, "あなた> "
             Read goal
             If (goal="")||($ZConvert(goal,"L")="quit")||($ZConvert(goal,"L")="exit") { Quit }
-            // このターンで追加されるメッセージの開始位置(trajectory を当該分だけ描くため)。
+            // /trace: 直前の応答の軌跡(思考と行動の連鎖)と集計を表示する。
+            If $ZConvert(goal,"L")="/trace" {
+                If lastFrom<0 {
+                    Write "  (まだ表示できる軌跡がありません。先に質問してください。)", !
+                } Else {
+                    Do ..ShowTrajectory(session, lastFrom)
+                    Set st = session.GetStats()
+                    Write "=== 集計(累計)===", !, "ツール呼び出し ", st."total_tool_calls", " 回 / トークン ", st."total_prompt_tokens" + st."total_completion_tokens", !
+                }
+                Continue
+            }
+            // /help: 使えるコマンドを表示する。
+            If $ZConvert(goal,"L")="/help" {
+                Write "  コマンド: /trace=直前の応答の軌跡と集計を表示 / /help=このヘルプ / quit(または空行)=終了", !
+                Continue
+            }
+            // このターンで追加されるメッセージの開始位置(/trace で当該分だけ描くため)。
             Set from = session.MessageCount()
-            Set monitor = ##class(Demo.Teacher.Monitor).%New()
-            Set response = agent.Run(session, goal, maxIterations, monitor)
-            Do ..ShowTrajectory(session, from)
+            Write "  (考え中…)", !
+            // 通常のターンは応答だけを返す(会話を読みやすく保つ)。軌跡は /trace で見せる。
+            Set response = agent.Run(session, goal, maxIterations, "")
+            Set lastFrom = from
             Write "=== 応答 ===", !
             Do ..Say(response.Content)
             Write !
-            Set st = session.GetStats()
-            Write "=== 集計 ===", !, "ツール呼び出し 累計 ", st."total_tool_calls", " 回 / 累計トークン ", st."total_prompt_tokens" + st."total_completion_tokens", !
+            Write "  (/trace で直前の応答の軌跡と集計を表示)", !
         }
         Write !, "=== 終了 ===", !
     } Catch ex {
