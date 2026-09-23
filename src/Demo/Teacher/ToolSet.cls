@@ -5,10 +5,11 @@
 /// さらに <class>Demo.Teacher.Audit.PersistentAudit</class>(Audit ポリシー)で、実行された
 /// ツールを「誰が・いつ・成否」まで DB に永続監査する(RBAC × 永続監査の層)。
 ///
+///   - Demo.Teacher.Tools.Catalog(ListPracticeQuestions)… 要件なし=誰でも(設問一覧の閲覧)。
 ///   - Demo.Teacher.Tools.Study(GradeMyAnswer / ShowReportCard)… 生徒(Demo_Study)専用。
 ///   - Demo.Teacher.Tools.Authoring(RegisterQuestion)… 設問管理者(Demo_Authoring)専用。
 ///
-/// SearchPolicy(ベクトル検索の KnowledgeBase)は要件なしでエージェントへ別途登録する
+/// SearchPolicy(ベクトル検索の KnowledgeBase)も要件なしでエージェントへ別途登録する
 /// (生徒・設問管理者どちらからも見える)。
 Class Demo.Teacher.ToolSet Extends %AI.ToolSet
 {
@@ -21,6 +22,7 @@ XData Definition [ MimeType = application/xml ]
     <Authorization Class="Demo.Teacher.RoleGuard"/>
     <Audit Class="Demo.Teacher.Audit.PersistentAudit"/>
   </Policies>
+  <Include Class="Demo.Teacher.Tools.Catalog"/>
   <Include Class="Demo.Teacher.Tools.Study">
     <Requirement Name="resource" Value="Demo_Study"/>
   </Include>

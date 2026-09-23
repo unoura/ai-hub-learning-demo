@@ -4,8 +4,8 @@
 > 聴衆向け手順は後日 `docs/guide/agents/teacher-agent.md`、実施記録は `local/worklog/agents/teacher-agent.md` に分ける(混ぜない)。
 >
 > **実装状況(2026-09-21 / 監査・承認追加 2026-09-23)**: 第1段(教材データ + ベクトル検索)・第2段(権限制御 + ツール群 + trajectory + RunAs)・
-> 第3段(ペルソナ再設計)・第6段(永続監査 `%AI.Policy.Audit`)・第7段(人手承認・フィードバック human-in-the-loop)とも
-> **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は
+> 第3段(ペルソナ再設計)・第6段(永続監査 `%AI.Policy.Audit`)・第7段(人手承認・フィードバック human-in-the-loop)・
+> 第8段(設問一覧を共有ツール化)とも **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は
 > `Demo.Teacher.*` パッケージに収めた(当初スケッチの `Demo.Policy.*` / `Demo.ToolSet.*` / `Demo.RunAs` は下記の実クラス名で置き換わる)。
 
 > ---
@@ -32,14 +32,15 @@
 >
 > | クラス | ツール | 要件リソース | 働き |
 > |---|---|---|---|
-> | `Demo.Teacher.Tools.Study` | `ListPracticeQuestions` | `Demo_Study`(生徒) | 既存の練習問題(questionId/category/prompt/difficulty)を返す=生徒への**出題**。模範解答・採点基準は返さない。生徒は新規作問できない(作問は設問管理者権限)ため、既存問題から出題する |
+> | `Demo.Teacher.Tools.Catalog` | `ListPracticeQuestions` | なし(全員) | 既存設問(questionId/category/prompt/difficulty)を返す。模範解答・採点基準は返さない。生徒への**出題**にも設問管理者の**作問前カタログ確認**にも使う共有ツール(第8段で `Tools.Study` から分離。下記) |
 > | `Demo.Teacher.Tools.Study` | `GradeMyAnswer` | `Demo_Study`(生徒) | 解答を採点し点数+講評を Progress に登録。**採点はサーバ側で** AnswerKey の採点キーポイントと語句照合して算出(自己申告不可)。返り値は点数・到達/未達観点・出典のみ(模範解答/採点基準は返さない) |
 > | `Demo.Teacher.Tools.Study` | `ShowReportCard` | `Demo_Study`(生徒) | 本人の直近10件(`Ts` 降順)を取得。エージェントが平均・傾向・弱点を**要約** |
 > | `Demo.Teacher.Tools.Authoring` | `RegisterQuestion` | `Demo_Authoring`(設問管理者) | エージェントが SearchPolicy を基に**生成**した設問・模範解答・採点基準・採点キーポイントを Question/AnswerKey に**登録** |
 > | `SearchPolicy`(KnowledgeBase) | — | なし(全員) | 規程のベクトル検索(第1段のまま) |
 >
-> 旧 `Tools.Learn`/`Tools.AnswerKey`/`Tools.Grade` は削除。ToolSet は Include を Study / Authoring の
-> 2クラスに置き換え、各 Include に `resource` 要件(`Demo_Study` / `Demo_Authoring`)を付ける。
+> 旧 `Tools.Learn`/`Tools.AnswerKey`/`Tools.Grade` は削除。ToolSet は Include を Catalog(要件なし)/ Study /
+> Authoring の3クラスにし、Study/Authoring の Include に `resource` 要件(`Demo_Study` / `Demo_Authoring`)を付ける
+> (Catalog は要件なし=誰でも)。※当初は `ListPracticeQuestions` も `Tools.Study` に同居していたが、第8段で共有化した(下記)。
 >
 > ### データモデルの変更
 >
@@ -156,6 +157,29 @@
 > - **正直な位置づけ**: 承認ゲートは `%CanExecute` が唯一の実行門で、差し戻しは「実行拒否+指示の伝達」を
 >   1つのエラーで兼ねる簡素な方式。より厳密には承認待ちキュー/非同期承認(別 UI で承認)も設計できるが、
 >   デモは「土台側で書き込みを人間が承認し、指示で AI に作り直させる」1周を最短で見せることを優先した。
+>
+> ### 設問一覧を共有ツールに(第8段で追加)
+>
+> **動機(ユーザ指摘)**: 設問管理者は作問するのに**既存の設問一覧が見えず**、重複回避や手薄な分野の
+> 把握ができず不便だった(既知 TODO「作問カテゴリのズレ」とも地続き)。→ `ListPracticeQuestions` を
+> **生徒・設問管理者どちらからも使える共有ツール**にした(ユーザ確定=「既存ツールを共有に変更」)。
+>
+> - **実装上の要点**: ToolSet の `<Requirement>` は Include 内の**全ツール**にメタデータを stamp するため、
+>   `Tools.Study`(`Demo_Study` 要件)に同居したままでは `ListPracticeQuestions` だけを開放できない。
+>   → **`ListPracticeQuestions` を新クラス `Demo.Teacher.Tools.Catalog` に切り出し、要件なしの Include**
+>   (`<Include Class="Demo.Teacher.Tools.Catalog"/>`)として ToolSet に足した。採点・成績(`GradeMyAnswer` /
+>   `ShowReportCard`)は `Tools.Study` に残し `Demo_Study` 専用のまま。`RoleGuard` は resource 要件が空なら
+>   `%CanList`=1 / `%CanExecute`=素通しなので**変更不要**。
+> - **SQL 面**: `ListPracticeQuestions` は `Demo_Teacher.Question` を SELECT。設問文(模範解答は含まない)は
+>   規程(Policy)と同じく**共有情報**なので、GrantSql で **Question の SELECT を共有ロール `Demo_Runtime`**
+>   に寄せた(PolicyVec と同じ扱い)。従来の生徒/設問管理者ロール個別の Question GRANT は不要になり削除。
+> - **デモの物語への影響(承知の上)**: `Compare()` で設問管理者にも `ListPracticeQuestions` が見えるように
+>   なり「ほぼ排他」が一部崩れるが、**排他なのは採点・成績(生徒)と作問(設問管理者)**で、閲覧系の共有
+>   ツール(`SearchPolicy` / `ListPracticeQuestions`)は両者に開く、という整理にした(SearchPolicy が既に
+>   共有なので不自然ではない)。実機 end-to-end 検証(Bedrock, RunLessonAs qadmin01「既存の問題一覧を
+>   見せて」): `ListPracticeQuestions {}` を実呼び→5件を一覧提示→重複しない作問を提案、まで確認。
+> - **ツール名は据置**: 「既存ツールを共有に」の趣旨に沿い名前は `ListPracticeQuestions` のまま
+>   (設問管理者向けには「作問前のカタログ確認」と位置づけを言い換え)。
 >
 > ### ビルド時の注意(第4段で判明・恒久対策済み)
 >

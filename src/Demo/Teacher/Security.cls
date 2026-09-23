@@ -79,19 +79,20 @@ ClassMethod GrantSql() As %Status
 {
     New $Namespace
     Set $Namespace = "DEMO"
-    // 実行基盤(誰でも): 規程検索のためのベクトル索引の参照。
+    // 実行基盤(誰でも): 規程検索のためのベクトル索引と、設問一覧(共有カタログ)の参照。
+    //   設問文(模範解答は含まない)は生徒の出題にも設問管理者の作問前確認にも使う共有情報
+    //   なので、共有ロール Demo_Runtime に SELECT を寄せる(ListPracticeQuestions が読む)。
     Do ..Grant("SELECT ON Demo_Teacher.PolicyVec TO Demo_Runtime")
     Do ..Grant("SELECT ON Demo_Teacher.PolicyVec_Config TO Demo_Runtime")
-    // 生徒: 規程・設問・自分の学習履歴の参照。採点基準(AnswerKey)は与えない。
+    Do ..Grant("SELECT ON Demo_Teacher.Question TO Demo_Runtime")
+    // 生徒: 規程・自分の学習履歴の参照。採点基準(AnswerKey)は与えない。
     //   ・出典の引用(GradeMyAnswer)と成績表(ShowReportCard)の SQL に使う。
     //   ・履歴の本人限定は各ツール内で WHERE Learner=$Username により行う(簡易的措置。
     //     本番は行レベルセキュリティで担保する)。
     Do ..Grant("SELECT ON Demo_Teacher.Policy TO Demo_Student")
-    Do ..Grant("SELECT ON Demo_Teacher.Question TO Demo_Student")
     Do ..Grant("SELECT ON Demo_Teacher.Progress TO Demo_Student")
-    // 設問管理者: 規程・設問・採点基準の参照(作問の下調べ用)。
+    // 設問管理者: 規程・採点基準の参照(作問の下調べ用)。設問一覧は上の共有 SELECT で足りる。
     Do ..Grant("SELECT ON Demo_Teacher.Policy TO Demo_QuestionAdmin")
-    Do ..Grant("SELECT ON Demo_Teacher.Question TO Demo_QuestionAdmin")
     Do ..Grant("SELECT ON Demo_Teacher.AnswerKey TO Demo_QuestionAdmin")
     Return $$$OK
 }

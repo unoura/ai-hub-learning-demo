@@ -27,7 +27,8 @@
 | `Demo.Teacher.Teacher` | 先生エージェント本体([Demo.Agent.Base](plain-agent.md) 継承。プロバイダは自動採用) |
 | `Demo.Teacher.ToolSet` | ツールセット。各ツールクラスに**必要リソース**を紐付ける |
 | `Demo.Teacher.RoleGuard` | 権限ゲート `%CanList`/`%CanExecute` + 人手承認ゲート(作問の登録前に人間が承認/却下/差し戻し) |
-| `Demo.Teacher.Tools.Study` | `ListPracticeQuestions` / `GradeMyAnswer` / `ShowReportCard` — 出題・採点・成績表(**生徒のみ**) |
+| `Demo.Teacher.Tools.Catalog` | `ListPracticeQuestions` — 既存設問の一覧(**誰でも**。生徒=出題 / 設問管理者=作問前の確認) |
+| `Demo.Teacher.Tools.Study` | `GradeMyAnswer` / `ShowReportCard` — 採点・成績表(**生徒のみ**) |
 | `Demo.Teacher.Tools.Authoring` | `RegisterQuestion` — 設問の作成・登録(**設問管理者のみ**) |
 | `Demo.Teacher.Security` | デモ用の RBAC(リソース / ロール / ユーザ)を作成 |
 | `Demo.Teacher.RunAs` | 別ユーザの権限で「見えるツール・取れる行動」の違いを実演 |
@@ -41,7 +42,7 @@
 | ツール | 必要リソース | 生徒 | 設問管理者 |
 |---|---|:--:|:--:|
 | `SearchPolicy`(規程のベクトル検索) | なし | ✅ | ✅ |
-| `ListPracticeQuestions`(出題) | `Demo_Study` | ✅ | ❌ |
+| `ListPracticeQuestions`(設問一覧) | なし | ✅ | ✅ |
 | `GradeMyAnswer`(採点) | `Demo_Study` | ✅ | ❌ |
 | `ShowReportCard`(成績表) | `Demo_Study` | ✅ | ❌ |
 | `RegisterQuestion`(作問) | `Demo_Authoring` | ❌ | ✅ |
@@ -113,12 +114,15 @@ DEMO> do ##class(Demo.Teacher.Setup).Rebuild()
 DEMO> do ##class(Demo.Teacher.RunAs).Compare()
 === RunAs: ロール別のツールディスカバリ ===
 student01(Demo_Runtime,Demo_Student)が見えるツール: GradeMyAnswer, ListPracticeQuestions, ShowReportCard
-qadmin01(Demo_Runtime,Demo_QuestionAdmin)が見えるツール: RegisterQuestion
+qadmin01(Demo_Runtime,Demo_QuestionAdmin)が見えるツール: ListPracticeQuestions, RegisterQuestion
 ----
 生徒には作問ツールが、設問管理者には採点・成績ツールが、そもそも見えない(%CanList で除外)。
 ```
 
 - **生徒(student01)には採点・成績ツールだけ**、設問管理者(qadmin01)には作問ツールだけが見えます。
+  一方 **`ListPracticeQuestions`(設問一覧)は要件なし=両方に見えます**(`SearchPolicy` と同じ共有ツール。
+  生徒には「出題」、設問管理者には「作問前のカタログ確認」として役立つため)。「排他」なのは
+  採点・成績(生徒)と作問(設問管理者)で、閲覧系の共有ツールは両者に開いています。
 - 判定は `RoleGuard.%CanList()` が `$SYSTEM.Security.Check(リソース, "USE")` で行います。
   **LLM は見えないツールを呼べない** — プロンプトインジェクションで作問させようとしても、
   生徒からはそのツールは存在しないのと同じです(=土台での封じ込め)。
@@ -203,6 +207,9 @@ DEMO> do ##class(Demo.Teacher.RunAs).RunLessonAs("qadmin01", "『情報持ち出
   **設問文・模範解答・採点基準・採点キーポイントを生成**し(生成)、**`RegisterQuestion`** で
   Question / AnswerKey に**書き込みます**(情報登録)。1 つの会話に、取得・生成・登録が揃います。
 - 生徒側では `RegisterQuestion` が**カタログに無い**ので、どう促しても作問できません。
+- 「問題一覧を見せて」と頼むと **`ListPracticeQuestions`(共有ツール)** で既存の設問を確認できます。
+  作問の前に既存問題を見て、**重複を避け・手薄な分野を補う**のに使います(採点・成績表は権限外なので
+  頼んでも使えません)。
 - **登録の直前には人間の承認**が入ります(承認 / 却下 / フィードバックで差し戻し)。詳細は
   見どころ 6(human-in-the-loop)。
 

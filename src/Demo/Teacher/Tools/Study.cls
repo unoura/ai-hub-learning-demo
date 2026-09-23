@@ -4,10 +4,12 @@ Include %occStatus
 /// 権限判定は ToolSet に取り付ける <class>Demo.Teacher.RoleGuard</class> に集約し、
 /// ここは業務ロジックのみを持つ。
 ///
-///   - ListPracticeQuestions: 取り組める練習問題の一覧を返す(生徒への「出題」。模範解答は返さない)。
 ///   - GradeMyAnswer: 生徒の解答を採点し、点数と講評を学習履歴(Progress)に登録する。
 ///       採点基準(AnswerKey)は**ツール内部でのみ**参照し、生徒には点数と観点フィードバックだけ返す。
 ///   - ShowReportCard: 本人の直近10件の採点履歴と集計を返す(成績表の材料)。
+///
+/// 既存設問の一覧(ListPracticeQuestions)は共有ツール <class>Demo.Teacher.Tools.Catalog</class> に
+/// 分離した(生徒の出題にも設問管理者の作問前確認にも使うため、要件なし=誰でも)。
 Class Demo.Teacher.Tools.Study Extends %AI.Tool
 {
 
@@ -16,32 +18,11 @@ XData INSTRUCTIONS [ MimeType = text/markdown ]
 # 学習ツール(生徒用)
 
 生徒の学習を支援する。
-- 「問題を出して」「練習したい」と言われたら ListPracticeQuestions で既存の練習問題を取得して提示する。
-  生徒は新しい問題を**作れない**(作問は設問管理者の権限)。既存の練習問題から出題すること。
+- 「問題を出して」「練習したい」と言われたら ListPracticeQuestions(共有ツール)で既存の練習問題を
+  取得して提示する。生徒は新しい問題を**作れない**(作問は設問管理者の権限)。既存の練習問題から出題すること。
 - 生徒が解答を書いてきたら GradeMyAnswer で採点する(点数と講評が学習履歴に登録される)。
 - 模範解答・採点基準の全文は生徒に見せない。点数と「到達/未達の観点」「出典」だけ伝える。
 - 成績を求められたら ShowReportCard で本人の履歴を取得し、成績表にまとめる。
-}
-
-/// 取り組める練習問題の一覧を返す(生徒への「出題」)。category を指定すると分野で絞る。
-/// 返り値は questionId / category / prompt / difficulty のみで、模範解答・採点基準は含めない。
-Method ListPracticeQuestions(category As %String = "") As %DynamicObject
-{
-    Set questions = []
-    If category = "" {
-        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, Category, Prompt, Difficulty FROM Demo_Teacher.Question ORDER BY ID")
-    } Else {
-        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, Category, Prompt, Difficulty FROM Demo_Teacher.Question WHERE Category = ? ORDER BY ID", category)
-    }
-    While rs.%Next() {
-        Set item = {}
-        Set item.questionId = rs.%Get("ID")
-        Set item.category = rs.%Get("Category")
-        Set item.prompt = rs.%Get("Prompt")
-        Set item.difficulty = rs.%Get("Difficulty")
-        Do questions.%Push(item)
-    }
-    Return {"count": (questions.%Size()), "questions": (questions)}
 }
 
 /// 生徒の解答を採点し、点数と講評を Progress に登録する(生徒本人の学習記録)。

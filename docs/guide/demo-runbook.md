@@ -123,7 +123,7 @@ DEMO> do ##class(Demo.Agent.Plain).Talk()
 - **生徒(student01)**: **練習問題を出してもらい**、自分の解答を**採点**してもらい(点数+講評が学習履歴に登録される)、**成績表**を見られる。
 - **設問管理者(qadmin01)**: 規程を基に**設問を作成**して教材に登録できる。
 
-ツールは役割でほぼ排他です: 出題・採点・成績(`ListPracticeQuestions` / `GradeMyAnswer` / `ShowReportCard`)は生徒だけ、作問(`RegisterQuestion`)は設問管理者だけ。規程検索(`SearchPolicy`)は誰でも使えます。
+ツールは役割でほぼ排他です: 採点・成績(`GradeMyAnswer` / `ShowReportCard`)は生徒だけ、作問(`RegisterQuestion`)は設問管理者だけ。規程検索(`SearchPolicy`)と設問一覧(`ListPracticeQuestions`)は誰でも使えます(生徒には「出題」、設問管理者には「作問前の確認」)。
 
 **4a. 権限でツールディスカバリが変わる**
 
@@ -131,8 +131,8 @@ DEMO> do ##class(Demo.Agent.Plain).Talk()
 DEMO> do ##class(Demo.Teacher.RunAs).Compare()
 ```
 
-- 確認できること: `student01 → GradeMyAnswer, ListPracticeQuestions, ShowReportCard` / `qadmin01 → RegisterQuestion`。
-- 何が起きているか: **同じエージェント・同じ探索処理でも、実行者のロールで見えるツールが変わります**。`%CanList` がカタログから除外するので、生徒には作問ツールが、設問管理者には採点・成績ツールが**そもそも見えません**=土台での封じ込め(プロンプトインジェクションでも呼べない)。
+- 確認できること: `student01 → GradeMyAnswer, ListPracticeQuestions, ShowReportCard` / `qadmin01 → ListPracticeQuestions, RegisterQuestion`。
+- 何が起きているか: **同じエージェント・同じ探索処理でも、実行者のロールで見えるツールが変わります**。`%CanList` がカタログから除外するので、生徒には作問ツールが、設問管理者には採点・成績ツールが**そもそも見えません**=土台での封じ込め(プロンプトインジェクションでも呼べない)。`ListPracticeQuestions`(設問一覧)は要件なしの共有ツールなので両者に見えます(`SearchPolicy` と同じ枠)。
 
 **4b. 取れる行動も変わる(実際に実行してみる)**
 
