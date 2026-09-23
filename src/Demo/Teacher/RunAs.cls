@@ -78,7 +78,6 @@ ClassMethod ShowAudit(n As %Integer = 10) As %Status
         Write "      args: ", $Extract(rs.Arguments, 1, 90), !
     }
     If count = 0 { Write "  (監査ログは空です。RunLessonAs / TalkAs でツールを実行すると記録されます)", ! }
-    Else { Write "----", !, "誰が・どのツールを・成否まで、会話が終わっても DB に残る(RBAC × 永続監査)。", ! }
     Return $$$OK
 }
 

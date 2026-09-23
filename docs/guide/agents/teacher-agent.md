@@ -261,8 +261,6 @@ DEMO> do ##class(Demo.Teacher.RunAs).ShowAudit()
       args: {"category":"…","modelAnswer":"…","prompt":"…"}
   2026-09-23 04:57:05   student01  ✓ GradeMyAnswer  (1ms)
       args: {"answer":"…","questionId":1}
-----
-誰が・どのツールを・成否まで、会話が終わっても DB に残る(RBAC × 永続監査)。
 ```
 
 - **記録されるユーザ名は切替後のデモユーザ**(`student01` / `qadmin01`)です。監査は Login 後の
