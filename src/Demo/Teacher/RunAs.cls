@@ -55,6 +55,43 @@ ClassMethod ShowToolsFor(username As %String, pwd As %String = "demo") As %Statu
     Return $$$OK
 }
 
+/// 永続監査ログ(Demo.Teacher.Audit.ToolCallLog)の直近 n 件を表示する。
+/// RBAC デモの締めに使う: student01 の採点・qadmin01 の作問が、それぞれ<b>別ユーザ名で
+/// 永続監査に残っている</b>ことを見せる。trajectory(会話が終われば揮発)と対照的に、
+/// ツール実行の証跡はプラットフォーム側に残る。
+///
+/// 特権セッション(通常の DEMO 入室 = %All)から実行する想定。
+///
+///   >>> do ##class(Demo.Teacher.RunAs).ShowAudit()
+ClassMethod ShowAudit(n As %Integer = 10) As %Status
+{
+    Write "=== 永続監査ログ(直近 ", n, " 件)===", !
+    Set sql = "SELECT TOP ? CreatedAt, Username, ToolName, Success, DurationMs, Arguments "
+            _ "FROM Demo_Teacher_Audit.ToolCallLog ORDER BY ID DESC"
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, sql, n)
+    Set count = 0
+    While rs.%Next() {
+        Set count = count + 1
+        Write "  ", rs.CreatedAt, "  ", $Justify(rs.Username, 10), "  ",
+              $Select(rs.Success: "✓", 1: "✗"), " ", rs.ToolName,
+              "  (", rs.DurationMs, "ms)", !
+        Write "      args: ", $Extract(rs.Arguments, 1, 90), !
+    }
+    If count = 0 { Write "  (監査ログは空です。RunLessonAs / TalkAs でツールを実行すると記録されます)", ! }
+    Else { Write "----", !, "誰が・どのツールを・成否まで、会話が終わっても DB に残る(RBAC × 永続監査)。", ! }
+    Return $$$OK
+}
+
+/// 監査ログを消去する(デモのやり直し用)。監査証跡は Setup.Rebuild では消さないため別メソッドにする。
+///
+///   >>> do ##class(Demo.Teacher.RunAs).ClearAudit()
+ClassMethod ClearAudit() As %Status
+{
+    Do ##class(Demo.Teacher.Audit.ToolCallLog).%KillExtent()
+    Write "[audit] 監査ログを消去しました。", !
+    Return $$$OK
+}
+
 /// 「取れる行動」の権限差を実演する。各ユーザの identity で GradeMyAnswer(採点)/
 /// RegisterQuestion(作問)を実際に実行し、生徒は採点だけ・設問管理者は作問だけ成功する
 /// (もう一方は %CanList でカタログに無い)ことを示す。

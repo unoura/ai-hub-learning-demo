@@ -32,6 +32,8 @@
 | `Demo.Teacher.Security` | デモ用の RBAC(リソース / ロール / ユーザ)を作成 |
 | `Demo.Teacher.RunAs` | 別ユーザの権限で「見えるツール・取れる行動」の違いを実演 |
 | `Demo.Teacher.Monitor` | trajectory の観測(反復数・トークン) |
+| `Demo.Teacher.Audit.PersistentAudit` | 監査ポリシー(`%AI.Policy.Audit`)。ツール実行を DB に永続監査 |
+| `Demo.Teacher.Audit.ToolCallLog` | 永続監査ログ(誰が・いつ・どのツールを・成否・所要 ms) |
 | `Demo.Teacher.Setup` | 教材データ投入 + ベクトル索引の構築 + 成績表デモ用の履歴 |
 
 ツールと必要リソースの対応(採点・成績と作問はほぼ排他):
@@ -232,7 +234,8 @@ DEMO> do ##class(Demo.Teacher.Teacher).RunLesson("『情報持ち出し』の社
 
 - エージェントは自分で **`SearchPolicy`(ベクトル検索)を呼ぶ**判断をし、DB の規程本文を根拠に**出典(条番号)付き**で回答します。
 - **trajectory はセッション履歴から再構成**しています(質問 → ツール呼び出し → ツール結果 → 回答生成)。
-  誰が何をどのツールで行ったかを後から追える = 監査・再現の土台です。
+  誰が何をどのツールで行ったかを、その会話の中で追えます。**会話が終わっても残る永続監査**は
+  次の見どころ 5(`%AI.Policy.Audit`)で扱います。
 
 > **プロンプトのコツ**: 「〜を調べて出典付きで教えて」のように**ツールを使う必然**があるゴールにすると、
 > 確実にベクトル検索が走ります。
@@ -240,6 +243,43 @@ DEMO> do ##class(Demo.Teacher.Teacher).RunLesson("『情報持ち出し』の社
 > **検索品質の正直な注意**: FastEmbed は英語モデルのため、語彙が一致する日本語質問には強い一方、
 > 意味理解が要る質問(例: 「端末を紛失」→インシデント報告)では外すことがあります。デモは検索が
 > 効く質問に寄せています。本番で日本語品質が要る場合は OpenAI 埋め込み等に切り替えます(設計ドキュメント参照)。
+
+## 見どころ 5: 永続監査(誰が・どのツールを実行したかが DB に残る)
+
+trajectory は「その会話の中で過程を追う」もので、会話が終われば揮発します。ここでは
+**プラットフォーム側にツール実行の証跡を永続化**します。ToolSet に**監査ポリシー**
+(`%AI.Policy.Audit` を継承した `Demo.Teacher.Audit.PersistentAudit`)を1つ付けるだけで、
+ツールが実行されるたびに「**誰が・いつ・どのツールを・成否・所要 ms・引数**」が
+`Demo.Teacher.Audit.ToolCallLog`(SQL 表 `Demo_Teacher_Audit.ToolCallLog`)に1行残ります。
+
+上の見どころ 2〜4 を実行したあとで、直近の監査ログを見てみます:
+
+```objectscript
+DEMO> do ##class(Demo.Teacher.RunAs).ShowAudit()
+=== 永続監査ログ(直近 10 件)===
+  2026-09-23 04:57:05    qadmin01  ✓ RegisterQuestion  (0ms)
+      args: {"category":"…","modelAnswer":"…","prompt":"…"}
+  2026-09-23 04:57:05   student01  ✓ GradeMyAnswer  (1ms)
+      args: {"answer":"…","questionId":1}
+----
+誰が・どのツールを・成否まで、会話が終わっても DB に残る(RBAC × 永続監査)。
+```
+
+- **記録されるユーザ名は切替後のデモユーザ**(`student01` / `qadmin01`)です。監査は Login 後の
+  プロセスで走るので `$USERNAME` がそのまま残り、「見えるツールが割れる(RBAC)」ことと
+  「その実行が**別ユーザ名で監査に残る**」ことを 1 セットで見せられます。
+- **記録されるのは実際に実行されたツールだけ**です。生徒が作問を頼んでも `%CanList` で
+  カタログに無い(=`ToolNotFound`)ため実行に入らず、監査にも残りません。監査は
+  「起きたこと」を正直に残します(拒否そのものを残したい場合は認可ポリシー側で記録します)。
+- 取り付けは ToolSet の `<Policies>` に `<Audit Class="Demo.Teacher.Audit.PersistentAudit"/>` を
+  1 行足すだけ。`%AI.Policy.ConsoleAudit`(stdout に出すだけ・揮発)と違い、DB に残るので後から
+  SQL で集計・照会できます(IRIS の「システム監査 DB」= `$SYSTEM.Security.Audit` とは別枠)。
+- やり直したいときは `do ##class(Demo.Teacher.RunAs).ClearAudit()`(監査ログは `Setup.Rebuild()`
+  では消えません。証跡なので独立して扱います)。
+
+> **trajectory と永続監査の使い分け**: trajectory は「1 回の会話の思考と行動の連鎖」を**その場で**
+> 見せるもの、永続監査は「誰が何を実行したか」を**後から追える形で残す**もの。両者を合わせて
+> 「過程は追え、証跡は残る」がプラットフォーム側で成立します。
 
 ## 対話モードで役割差を見る(TalkAs)
 
@@ -298,7 +338,7 @@ DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("qadmin01")    ; 設問管理者(作
   → プレインエージェント(会話するだけ)
   → 先生エージェント(生徒=採点・成績 / 設問管理者=作問)
       ・自律的な情報取得(ベクトル検索)× 要約(成績表)× 生成(作問)× 情報登録(採点/設問)
-      ・権限で見えるツール・取れる行動が変わる × trajectory で過程を追える
+      ・権限で見えるツール・取れる行動が変わる × trajectory で過程を追える × 永続監査で証跡が残る
 ```
 
 同じエージェント・同じ質問でも、**呼び出す人の権限で見えるツールと取れる行動が変わる**。しかもその過程を

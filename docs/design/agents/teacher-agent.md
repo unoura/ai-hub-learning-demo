@@ -3,8 +3,8 @@
 > 本ドキュメントは**シナリオ設計と実現方式の確定**が目的。
 > 聴衆向け手順は後日 `docs/guide/agents/teacher-agent.md`、実施記録は `local/worklog/agents/teacher-agent.md` に分ける(混ぜない)。
 >
-> **実装状況(2026-09-21)**: 第1段(教材データ + ベクトル検索)・第2段(権限制御 + ツール群 + trajectory + RunAs)・
-> 第3段(ペルソナ再設計)とも **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は
+> **実装状況(2026-09-21 / 監査追加 2026-09-23)**: 第1段(教材データ + ベクトル検索)・第2段(権限制御 + ツール群 + trajectory + RunAs)・
+> 第3段(ペルソナ再設計)・第6段(永続監査 `%AI.Policy.Audit`)とも **実機で end-to-end 検証済み**。以下の実現方式は設計と実装が一致している。実際のクラス名は
 > `Demo.Teacher.*` パッケージに収めた(当初スケッチの `Demo.Policy.*` / `Demo.ToolSet.*` / `Demo.RunAs` は下記の実クラス名で置き換わる)。
 
 > ---
@@ -96,6 +96,29 @@
 > ①②③の機構(権限ゲート / trajectory / ベクトル検索)は不変に保つ。RunLessonAs / TalkAs のどちらでも
 > 同じ挙動(実機確認: student01 で「情報持ち出しについて教えて」→ SearchPolicy 発火・第7条を出典に解説・
 > 練習提案 / 採点 → 100点・出典付き・締めに「成績表を表示しますか?」の声かけ)。
+>
+> ### 永続監査(`%AI.Policy.Audit`)を採用(第6段で追加)
+>
+> それまで「過程を追う」手段は trajectory(`%AI.Agent.Session` 履歴からの再構成)だけで、**会話が
+> 終われば揮発**していた。→ AI Hub 標準の**監査ポリシー**を配線し、ツール実行の証跡を DB に永続化した
+> (参考: `aihub-demo/AdmissionDemo` の `PersistentAudit` / `ToolCallLog` パターン。実機で完動確認済み)。
+>
+> - **`Demo.Teacher.Audit.PersistentAudit`**(`%AI.Policy.Audit` 継承): `%LogExecution(call, metadata,
+>   result, duration, status)` を override し、`$USERNAME` / ツール名 / 引数 / 成否 / 所要 ms を1行 `%Save()`。
+>   監査失敗はツール実行に波及させない(Catch → プロセス外グローバル `^Demo.Teacher.AuditError`)。
+> - **`Demo.Teacher.Audit.ToolCallLog`**(`%Persistent`): SQL 表 `Demo_Teacher_Audit.ToolCallLog`。
+> - **取り付け**: ToolSet の `<Policies>` に `<Audit Class="Demo.Teacher.Audit.PersistentAudit"/>` を1行追加
+>   (`RegisterToolSet` / `UseToolSet` どちらの経路でも適用され、直接 `ExecuteTool` でも LLM 会話でも記録される)。
+> - **記録される `$USERNAME` は切替後のデモユーザ**(監査は Login 後のプロセスで走るため)。RBAC で
+>   ツールが割れることと、その実行が別ユーザ名で監査に残ることを 1 セットで見せられる(実機確認:
+>   CompareActions で student01=GradeMyAnswer / qadmin01=RegisterQuestion、RunLessonAs でも同様に記録)。
+> - **正直な位置づけ**: 記録されるのは**実際に実行されたツールだけ**。`%CanList` で除外された呼び出しは
+>   実行に入らない(`ToolNotFound`)ので監査には残らない(拒否そのものを残したいなら認可ポリシー側で記録)。
+>   `%AI.Policy.ConsoleAudit`(stdout・揮発)ではなく永続版を選択。IRIS の「システム監査 DB」
+>   (`$SYSTEM.Security.Audit`)とは別枠。deterministic replay の専用 API は無いので「厳密な再実行」ではなく
+>   「起きたツール実行の証跡」と位置づけ、trajectory(過程)と補完関係にある。
+> - 見せ方: `Demo.Teacher.RunAs.ShowAudit(n)`(直近 n 件を「誰が・成否・ツール・所要 ms・引数」で表示)/
+>   `ClearAudit()`(証跡なので `Setup.Rebuild()` では消さず、独立メソッドで消去)。
 >
 > ### ビルド時の注意(第4段で判明・恒久対策済み)
 >
@@ -312,9 +335,11 @@ Class Demo.Teacher.Monitor Extends %RegisteredObject   // 基底クラス不要�
            [step3] RecordScore(learner="taro", q=12, score=100)
            [final] 模範解答つき解説 + 記録完了
   ```
-- 永続監査(任意): `%AI.Policy.Audit`(`%LogExecution` → `%Save()`)で誰が・何を・どのツールで、を残す。
-  → 「安全な運用の土台=再現・監査できる」で締める。**deterministic replay の専用 API は無い**ため、
-  永続化した session / 監査ログから再構成する、と正直に位置づける(簡易的措置)。
+- 永続監査(**採用済み。第6段で追加**): `%AI.Policy.Audit`(`%LogExecution` → `%Save()`)で
+  誰が・いつ・どのツールを・成否・所要 ms を残す。→ 「安全な運用の土台=trajectory で過程を追え、
+  永続監査で証跡が残る」で締める。**deterministic replay の専用 API は無い**ため、厳密な再実行では
+  なく「起きたツール実行の証跡」を残す位置づけ(session 履歴からの trajectory 再構成と補完関係)。
+  詳細は下記「### 永続監査(`%AI.Policy.Audit`)を採用(第6段で追加)」。
 
 ### ③ IRIS ベクトル検索との連携(見どころ)
 
@@ -390,7 +415,7 @@ Class Demo.Teacher.Monitor Extends %RegisteredObject   // 基底クラス不要�
 |---|---|---|
 | identity | 起動時に受講者/監査ユーザを作成し `JOB` 子で `Security.Login` | 既存 IdP(LDAP/OAuth/Delegated 認証)に接続、Web/REST の認証済みコンテキストで実行 |
 | ポリシー | 1クラス `RoleGuard` に `%CanList`/`%CanExecute` を集約 | リソース/ロール設計を組織の RBAC に合わせ、`%AI.Policy.Discovery` で動的カタログ整形も検討 |
-| 監査 | callback 表示 +(任意)`%AI.Policy.Audit` | 監査ログを永続化・SIEM 連携。session 履歴から再構成 |
+| 監査 | trajectory(session 再構成)+ **永続監査 `%AI.Policy.Audit`(採用済み)** = `Demo.Teacher.Audit.ToolCallLog` に DB 永続化 | 監査ログを SIEM 連携。保持期間/改ざん防止、拒否イベントの記録も認可ポリシー側で拡張 |
 | 埋め込み | FastEmbed(384次元、ローカル) | 用途に応じ高次元モデル / OpenAI 埋め込み(Wallet 再利用)、再インデックス運用 |
 | 教材量 | ポリシー数条 + 練習問題数問 | 実ドキュメント群を `AddDocument`/`ReindexDocument` で継続投入 |
 

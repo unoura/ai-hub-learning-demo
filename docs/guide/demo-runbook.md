@@ -224,6 +224,25 @@ qadmin01 のパスワード(demo): ****
 - 何が起きているか: `TalkAs` は**現プロセスで**「特権のうちに LLM キーを解決 → `Security.Login` でそのユーザに切替 → 対話ループ」を行います。対話は端末入力(`READ`)を伴い子プロセスにできないため、この方式を取ります。
 - 補足(重要): `Security.Login` は**取消不可**です。`TalkAs` を実行したセッションは以降そのユーザのままなので、**別の役割を試すときはセッションを開き直して**ください(1 ターミナル = 1 ロール)。
 
+**4f. 永続監査(誰が・どのツールを実行したかが DB に残る)**
+
+trajectory(4c)が「その会話の中で過程を追う」のに対し、**ツール実行の証跡をプラットフォーム側に
+永続化**します。ToolSet に監査ポリシー(`%AI.Policy.Audit` 継承の `Demo.Teacher.Audit.PersistentAudit`)を
+1 つ付けてあるので、4b・4d・4e でツールを実行したあとに直近の監査ログを見られます。
+
+```objectscript
+DEMO> do ##class(Demo.Teacher.RunAs).ShowAudit()
+```
+
+- 確認できること: `student01 → GradeMyAnswer ✓` / `qadmin01 → RegisterQuestion ✓` が、**切替後の
+  ユーザ名・成否・所要 ms・引数**とともに DB(`Demo_Teacher_Audit.ToolCallLog`)に残っている。
+- 何が起きているか: 監査は Login 後のプロセスで走るので `$USERNAME` がそのまま記録され、「RBAC で
+  見えるツールが割れる」ことと「その実行が**別ユーザ名で監査に残る**」ことが 1 セットで見えます。
+  **実際に実行されたツールだけ**が残り(拒否は `%CanList` で実行前に消えるため記録されない)、監査は
+  起きたことを正直に残します。`%AI.Policy.ConsoleAudit`(stdout・揮発)と違い DB に残るので後から
+  SQL で照会・集計でき、IRIS の「システム監査 DB」(`$SYSTEM.Security.Audit`)とは別枠です。
+- やり直し: `do ##class(Demo.Teacher.RunAs).ClearAudit()`(監査ログは `Setup.Rebuild()` では消しません)。
+
 ---
 
 ## 5. まとめ
@@ -232,10 +251,10 @@ qadmin01 のパスワード(demo): ****
 構成要素: 軽量 IRIS(Docker) → IRISSECURITY 暗号化 → Wallet に API キー保護
   → プレインエージェント(会話するだけ)
   → 先生エージェント(生徒=採点・成績 / 設問管理者=作問。権限でツール・行動が変わる
-      × 要約・生成・情報登録 × trajectory × ベクトル検索)
+      × 要約・生成・情報登録 × trajectory × ベクトル検索 × 永続監査)
 ```
 
-キーを一度も平文で置かず、権限差はプラットフォームで担保し、過程は追える。
+キーを一度も平文で置かず、権限差はプラットフォームで担保し、過程は追え、証跡は残る。
 **安全なエージェント運用の土台**を、AI Hub を使って IRIS 側で成立させられます。
 これがハーネスエンジニアリングの実践です。
 
@@ -247,6 +266,9 @@ qadmin01 のパスワード(demo): ****
 ; 教材・採点履歴を初期状態へ戻す(デモ中に採点・作問すると Progress / Question が増えるため)。
 ; 規程・設問・模範解答・成績表デモ用の履歴をまとめて作り直す。
 DEMO> do ##class(Demo.Teacher.Setup).Rebuild()
+
+; 永続監査ログを消去する(証跡なので Rebuild では消えない。デモをやり直すとき)
+DEMO> do ##class(Demo.Teacher.RunAs).ClearAudit()
 
 ; RBAC(ロール/ユーザ)を撤去する場合
 DEMO> do ##class(Demo.Teacher.Security).Teardown()
