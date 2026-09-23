@@ -1,6 +1,6 @@
 {
     "objectscript.conn": {
-        "active": true,
+        "active": false,
         "ns": "DEMO",
         "username": "_SYSTEM",
         "password": "SYS",
