@@ -183,11 +183,13 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
 {
     Try {
         Set cy = ..#CY, green = ..#GREEN, blue = ..#BLUE, gray = ..#GRAY, bold = ..#BOLD, clr = ..#CLR
+        // コマンド案内(ヘッダ・各応答のあと・/help で同じ文言を出す)。
+        Set cmds = "/trace: 直前の応答の軌跡と集計  /quit: 終了"
         Set session = agent.CreateSession()
         Write gray, "============================================================", clr, !
         Write bold, cy, "  先生エージェント (AI Hub / 情報セキュリティ・コンプライアンス研修)", clr, !
         Write gray, "  見える・使えるツールは実行ユーザのロール(RBAC)で変わります", clr, !
-        Write gray, "  /quit で終了、/trace で直前の応答の軌跡と集計、/help でヘルプ", clr, !
+        Write gray, "  ", cmds, clr, !
         Write gray, "============================================================", clr, !
         Write !, gray, "Provider : ", clr, green, agent.ProviderName, clr, gray, "  (", agent.ConfigName, ")", clr, !
         Write gray, "Model    : ", clr, green, agent.Model, clr, !
@@ -218,7 +220,7 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
             }
             // /help: 使えるコマンドを表示する。
             If $ZConvert(goal,"L")="/help" {
-                Write gray, "  コマンド: /trace=直前の応答の軌跡と集計を表示 / /help=このヘルプ / quit・/quit(または空行)=終了", clr, !
+                Write gray, "  ", cmds, "(空行でも終了)", clr, !
                 Continue
             }
             // このターンで追加されるメッセージの開始位置(/trace で当該分だけ描くため)。
@@ -231,7 +233,7 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
             Write cy, bold, "先生", clr, cy, "> ", clr, !
             Do ..Say(response.Content)
             Write !
-            Write gray, "  (/trace で直前の応答の軌跡と集計を表示)", clr, !
+            Write gray, "  ", cmds, clr, !
         }
         Write !, gray, "=== 終了 ===", clr, !
     } Catch ex {
