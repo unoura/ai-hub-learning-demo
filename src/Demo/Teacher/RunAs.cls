@@ -232,7 +232,8 @@ ClassMethod TalkAs(username As %String, maxIterations As %Integer = 6) As %Statu
         Write "ログイン失敗: ", username, "(パスワードが違います。デモ用途なので、パスワードは共通で demo です。)", !
         Return $$$ERROR($$$GeneralError, "ログイン失敗: " _ username)
     }
-    Write "ログインしました。=== ", username, " として対話 (roles=", $Roles, ") ===", !
+    // 実行ユーザ・ロールは対話ヘッダ(TalkWith)に出るので、ここではログイン成功だけを示す。
+    Write "ログインしました。", !, !
     Do ##class(Demo.Teacher.Teacher).TalkWith(agent, maxIterations)
     // 3) Login は取消不可で、デモユーザは %Development を持たないため DEMO> プロンプトへは戻れない
     //    (戻ると IRIS が "Access Denied" を出して切断する)。理由を示して明示的にセッションを閉じる。

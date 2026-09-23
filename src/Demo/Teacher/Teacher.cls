@@ -12,6 +12,21 @@
 Class Demo.Teacher.Teacher Extends Demo.Agent.Base
 {
 
+/// 対話モードの配色(ANSI)。兄弟リポジトリ aihub-demo の対話デモに揃える。
+Parameter CY = {$C(27) _ "[36m"};
+
+Parameter GREEN = {$C(27) _ "[32m"};
+
+Parameter BLUE = {$C(27) _ "[34m"};
+
+Parameter GRAY = {$C(27) _ "[90m"};
+
+Parameter RED = {$C(27) _ "[31m"};
+
+Parameter BOLD = {$C(27) _ "[1m"};
+
+Parameter CLR = {$C(27) _ "[0m"};
+
 XData INSTRUCTIONS [ MimeType = "text/markdown" ]
 {
 # 役割
@@ -167,17 +182,25 @@ ClassMethod Talk(maxIterations As %Integer = 6) As %Status
 ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 6) As %Status
 {
     Try {
+        Set cy = ..#CY, green = ..#GREEN, blue = ..#BLUE, gray = ..#GRAY, bold = ..#BOLD, clr = ..#CLR
         Set session = agent.CreateSession()
-        Write "=== 先生エージェント 対話モード ===", !
+        Write gray, "============================================================", clr, !
+        Write bold, cy, "  先生エージェント (AI Hub / 情報セキュリティ・コンプライアンス研修)", clr, !
+        Write gray, "  見える・使えるツールは実行ユーザのロール(RBAC)で変わります", clr, !
+        Write gray, "  /quit で終了、/trace で直前の応答の軌跡と集計、/help でヘルプ", clr, !
+        Write gray, "============================================================", clr, !
+        Write !, gray, "Provider : ", clr, green, agent.ProviderName, clr, gray, "  (", agent.ConfigName, ")", clr, !
+        Write gray, "Model    : ", clr, green, agent.Model, clr, !
+        Write gray, "実行ユーザ: ", clr, green, $Username, clr, gray, "  (roles=", $Roles, ")", clr, !, !
         // 最初に、いま使えるツールに基づいて「できること」を開示する。
         // ツールはロール(RBAC)で絞られているので、開示内容も呼び出し元のロールで自動的に変わる。
         Do ..Greet(agent, session, maxIterations)
-        Write !, "質問を入力してください。/trace=直前の応答の軌跡と集計を表示 / /help=ヘルプ / quit(空行)=終了", !
         // 直前ターンの trajectory 起点。/trace で当該ターン分だけ描くために覚えておく(-1=未実行)。
         Set lastFrom = -1
         For {
-            Write !, "あなた> "
-            Read goal
+            Write !, blue, bold, "あなた(", $Username, ")", clr, blue, "> ", clr
+            // READ は Enter で改行を出さないので、読み終えたら改行する。
+            Read goal, !
             // 貼り付け等で前後に空白が混じっても /trace・quit 等のコマンドが効くよう正規化する。
             Set goal = $ZStrip(goal, "<>W")
             // 他のコマンド(/trace・/help)に合わせて /quit・/exit でも終了できるようにする。
@@ -185,7 +208,7 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
             // /trace: 直前の応答の軌跡(思考と行動の連鎖)と集計を表示する。
             If $ZConvert(goal,"L")="/trace" {
                 If lastFrom<0 {
-                    Write "  (まだ表示できる軌跡がありません。先に質問してください。)", !
+                    Write gray, "  (まだ表示できる軌跡がありません。先に質問してください。)", clr, !
                 } Else {
                     Do ..ShowTrajectory(session, lastFrom)
                     Set st = session.GetStats()
@@ -195,23 +218,24 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
             }
             // /help: 使えるコマンドを表示する。
             If $ZConvert(goal,"L")="/help" {
-                Write "  コマンド: /trace=直前の応答の軌跡と集計を表示 / /help=このヘルプ / quit・/quit(または空行)=終了", !
+                Write gray, "  コマンド: /trace=直前の応答の軌跡と集計を表示 / /help=このヘルプ / quit・/quit(または空行)=終了", clr, !
                 Continue
             }
             // このターンで追加されるメッセージの開始位置(/trace で当該分だけ描くため)。
             Set from = session.MessageCount()
-            Write "  (考え中…)", !
+            // 進捗表示はグレーで控えめに出す。
+            Write gray, "  (考え中…)", clr, !
             // 通常のターンは応答だけを返す(会話を読みやすく保つ)。軌跡は /trace で見せる。
             Set response = agent.Run(session, goal, maxIterations, "")
             Set lastFrom = from
-            Write "=== 応答 ===", !
+            Write cy, bold, "先生", clr, cy, "> ", clr, !
             Do ..Say(response.Content)
             Write !
-            Write "  (/trace で直前の応答の軌跡と集計を表示)", !
+            Write gray, "  (/trace で直前の応答の軌跡と集計を表示)", clr, !
         }
-        Write !, "=== 終了 ===", !
+        Write !, gray, "=== 終了 ===", clr, !
     } Catch ex {
-        Write "エラー: ", ex.DisplayString(), !
+        Write ..#RED, "エラー: ", ex.DisplayString(), ..#CLR, !
         Return ex.AsStatus()
     }
     Return $$$OK
@@ -224,7 +248,7 @@ ClassMethod Greet(agent As Demo.Teacher.Teacher, session As %AI.Agent.Session, m
 {
     Set prompt = "利用者への最初の挨拶です。いまあなたが使えるツールを踏まえ、この場でできることを箇条書きで簡潔に日本語で自己紹介してください。まだツールは呼ばず、案内だけにしてください。"
     Set response = agent.Run(session, prompt, maxIterations, "")
-    Write "先生> ", !
+    Write ..#CY, ..#BOLD, "先生", ..#CLR, ..#CY, "> ", ..#CLR, !
     Do ..Say(response.Content)
     Write !
 }

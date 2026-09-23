@@ -17,6 +17,13 @@ Class Demo.Agent.Base Extends %AI.Agent [ Abstract ]
 /// 複数登録時のみ順序が効く(通常は1つだけ登録)。エージェント側で上書き可能。
 Parameter PROVIDERPRIORITY = "bedrock,anthropic,openai";
 
+/// 採用したプロバイダ(ConfigStore の model_provider。例: bedrock / anthropic / openai)。表示用。
+/// Provider オブジェクトは汎用の %AI.Provider なので、クラス名ではどのプロバイダか分からないため保持する。
+Property ProviderName As %String;
+
+/// 採用した ConfigStore の設定名(例: AI.LLM.bedrock)。表示用。
+Property ConfigName As %String;
+
 /// `%Init()` の最後に呼ばれるフック。プロバイダ未設定なら ConfigStore から動的に選んで生成する。
 Method %OnInit() As %Status
 {
@@ -45,6 +52,8 @@ Method %OnInit() As %Status
 	// model_provider から Provider を生成し、model をエージェントに設定。
 	Set ..Provider = ##class(%AI.Provider).Create(details.%Get("model_provider"), details)
 	Set ..Model = details.%Get("model")
+	Set ..ProviderName = details.%Get("model_provider")
+	Set ..ConfigName = "AI.LLM."_configName
 	Return $$$OK
 }
 
