@@ -199,6 +199,9 @@ DEMO> do ##class(Demo.Teacher.RunAs).RunLessonAs("qadmin01", "『情報持ち出
 ```objectscript
 ; 生徒として対話(別ターミナル / 別セッション)
 DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("student01")
+=== student01 でログインします ===
+student01 のパスワード(demo): ****      ; ← 入力は伏せ字(非表示)。demo と入力して Enter
+ログインしました。=== student01 として対話 (roles=Demo_Runtime,Demo_Student) ===
 あなた> 設問1に「12文字以上、記号を混ぜる、使い回さない」と答えます。採点して。
 ;   → GradeMyAnswer で採点(点数+講評)。続けて「成績表を見せて」も試せる。
 あなた> /trace
@@ -206,10 +209,15 @@ DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("student01")
 
 ; 設問管理者として対話(別のセッション)
 DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("qadmin01")
+qadmin01 のパスワード(demo): ****
 あなた> パスワード管理の規程から応用レベルの設問を1問作って登録して。
 ;   → SearchPolicy → RegisterQuestion で作問・登録。採点や成績表は頼んでも使えない。
 ```
 
+- **ログインを見せる**: `TalkAs` は入口で**パスワードを尋ねます**(IRIS 標準の `%Library.Prompt.GetPassword` を
+  使用。入力は**伏せ字=画面に出ません**)。デモの共通パスワードは **`demo`** です(`SetupRBAC` が設定)。
+  ここで **`$SYSTEM.Security.Login` が実際に走る**ので、「別のユーザとしてプラットフォームにログインし直している」
+  ことを、お客様の目で確認できます。
 - 確認できること: 4d と同じ役割差を、**対話しながら**確認できます。`quit` または空行で対話を終了します。
   対話の**冒頭で、エージェントが「いまできること」を自己紹介**します。この案内は**見えるツールに基づく**ので、生徒なら出題・採点・成績表、設問管理者なら作問、と**ロールで内容が自動的に変わり**、利用者は最初に何を頼めるか分かります。
 - **軌跡は必要なときだけ**: 通常は応答だけを返してクリーンに会話でき、**`/trace` と入力すると直前の応答の trajectory と集計(ツール呼び出し数・トークン)**を表示します。この案内は開始時と各応答のあとに毎回画面に出るので、利用者は**いつでも過程を追える**と分かります(`/help` でコマンド一覧)。単発の `RunLesson`(4c)は従来どおり毎回インラインで軌跡を見せます。

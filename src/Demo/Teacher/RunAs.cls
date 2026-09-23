@@ -1,4 +1,4 @@
-Include %occStatus
+Include (%occStatus, %syPrompt)
 
 /// RunAs デモ:別ユーザの権限で「見えるツール」がどう変わるかを実演する。
 ///
@@ -16,7 +16,7 @@ Class Demo.Teacher.RunAs
 {
 
 /// 生徒(student01)と設問管理者(qadmin01)の見えるツールを並べて表示する。
-ClassMethod Compare(pwd As %String = "SecDemo!2026") As %Status
+ClassMethod Compare(pwd As %String = "demo") As %Status
 {
     Write "=== RunAs: ロール別のツールディスカバリ ===", !
     Do ..ShowToolsFor("student01", pwd)
@@ -27,7 +27,7 @@ ClassMethod Compare(pwd As %String = "SecDemo!2026") As %Status
 }
 
 /// 指定ユーザの権限でツールをディスカバリし、結果を表示する。
-ClassMethod ShowToolsFor(username As %String, pwd As %String = "SecDemo!2026") As %Status
+ClassMethod ShowToolsFor(username As %String, pwd As %String = "demo") As %Status
 {
     Set outfile = "/tmp/runas_" _ username _ ".json"
     Do ##class(%File).Delete(outfile)
@@ -60,7 +60,7 @@ ClassMethod ShowToolsFor(username As %String, pwd As %String = "SecDemo!2026") A
 /// (もう一方は %CanList でカタログに無い)ことを示す。
 ///
 ///   >>> do ##class(Demo.Teacher.RunAs).CompareActions()
-ClassMethod CompareActions(pwd As %String = "SecDemo!2026") As %Status
+ClassMethod CompareActions(pwd As %String = "demo") As %Status
 {
     Write "=== RunAs: ロール別の「取れる行動」 ===", !
     Do ..ShowActionsFor("student01", pwd)
@@ -71,7 +71,7 @@ ClassMethod CompareActions(pwd As %String = "SecDemo!2026") As %Status
 }
 
 /// 指定ユーザの権限で採点/作問ツールを実行し、成否を表示する。
-ClassMethod ShowActionsFor(username As %String, pwd As %String = "SecDemo!2026") As %Status
+ClassMethod ShowActionsFor(username As %String, pwd As %String = "demo") As %Status
 {
     Set outfile = "/tmp/runas_act_" _ username _ ".json"
     Do ##class(%File).Delete(outfile)
@@ -140,7 +140,7 @@ ClassMethod TryTool(mgr As %AI.ToolMgr, name As %String, args As %DynamicObject)
 ///
 ///   >>> do ##class(Demo.Teacher.RunAs).RunLessonAs("student01", "設問1に『12文字以上、記号を混ぜる、使い回さない』と答えます。採点して。")
 ///   >>> do ##class(Demo.Teacher.RunAs).RunLessonAs("qadmin01", "パスワード管理の規程から応用レベルの設問を1問作って登録して。")
-ClassMethod RunLessonAs(username As %String, goal As %String = "『情報持ち出し』の社内規程を調べて、出典付きで要点を教えて", pwd As %String = "SecDemo!2026") As %Status
+ClassMethod RunLessonAs(username As %String, goal As %String = "『情報持ち出し』の社内規程を調べて、出典付きで要点を教えて", pwd As %String = "demo") As %Status
 {
     Set outfile = "/tmp/runas_lesson_" _ username _ ".txt"
     Do ##class(%File).Delete(outfile)
@@ -169,10 +169,21 @@ ClassMethod RunLessonAs(username As %String, goal As %String = "『情報持ち�
 /// を行う。**注意**: Security.Login は取消不可。TalkAs 終了後このセッションは指定ユーザのまま。
 /// 別ロールで試すには **セッションを開き直す**(reconnect)こと。
 ///
+/// 入口で**パスワードを非表示(伏せ字)で尋ねる**。プラットフォームの認証(Security.Login)が
+/// 実際に走ることを利用者に見せるのが狙い。デモの共通パスワードは "demo"(SetupRBAC で設定)。
+///
 ///   DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("student01")
 ///   DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("qadmin01")
-ClassMethod TalkAs(username As %String, pwd As %String = "SecDemo!2026", maxIterations As %Integer = 6) As %Status
+ClassMethod TalkAs(username As %String, maxIterations As %Integer = 6) As %Status
 {
+    // 0) ログインが実際に走ることを見せる: 標準の %Library.Prompt.GetPassword で
+    //    パスワードを伏せ字入力させる(入力エコーは IRIS が抑止)。デモの共通パスワードは demo。
+    Write "=== ", username, " でログインします ===", !
+    Set rc = ##class(%Library.Prompt).GetPassword(username _ " のパスワード(demo): ", .pwd)
+    If rc '= $$$SuccessResponse {
+        Write !, "パスワード入力が中断されました。", !
+        Return $$$OK
+    }
     // 1) 特権のうちに初期化(LLM シークレットをメモリ上の Provider へ解決)。
     Set agent = ##class(Demo.Teacher.Teacher).%New()
     Set sc = agent.%Init()
@@ -182,10 +193,10 @@ ClassMethod TalkAs(username As %String, pwd As %String = "SecDemo!2026", maxIter
     }
     // 2) デモユーザへ切替(不可逆)。以降のツール可視性/実行・教材 SQL はこのロールで判定。
     If '$SYSTEM.Security.Login(username, pwd) {
-        Write "ログイン失敗: ", username, !
+        Write "ログイン失敗: ", username, "(パスワードが違います。デモ用途なので、パスワードは共通で demo です。)", !
         Return $$$ERROR($$$GeneralError, "ログイン失敗: " _ username)
     }
-    Write "=== ", username, " として対話 (roles=", $Roles, ") ===", !
+    Write "ログインしました。=== ", username, " として対話 (roles=", $Roles, ") ===", !
     Return ##class(Demo.Teacher.Teacher).TalkWith(agent, maxIterations)
 }
 

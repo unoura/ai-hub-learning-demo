@@ -24,9 +24,9 @@ Parameter RESOURCETYPE = 8;
 /// 実行基盤ロールが持つ DB リソース。DEMO 名前空間でコードを動かすための最小限。
 Parameter RUNTIMEDBS = "%DB_DEMO_CODE:RW,%DB_DEMO_DATA:RW,%DB_DEMO_DATASECONDARY:RW,%DB_IRISLIB:R,%DB_IRISSYS:RW,%DB_IRISTEMP:RW,%DB_IRISLOCALDATA:RW,%DB_%DEFAULT:RW";
 
-/// リソース/ロール/ユーザをまとめて作成(既存はスキップ)。
-/// pwd: デモユーザのパスワード(ローカル専用)。
-ClassMethod SetupRBAC(pwd As %String = "SecDemo!2026") As %Status
+/// リソース/ロール/ユーザをまとめて作成(既存はスキップ。ユーザのパスワードは既定値に揃える)。
+/// pwd: デモユーザの共通パスワード(ローカルデモ専用。既定 "demo")。
+ClassMethod SetupRBAC(pwd As %String = "demo") As %Status
 {
     New $Namespace
     Set $Namespace = "%SYS"
@@ -131,11 +131,16 @@ ClassMethod EnsureRole(name As %String, desc As %String, resources As %String) A
 }
 
 /// ユーザが無ければ作成(DEMO 名前空間を既定に、ロールを付与)。
+/// 既存の場合はパスワードだけデモ既定に揃える(SetupRBAC を「パスワードの唯一の正」にする)。
 ClassMethod EnsureUser(name As %String, role As %String, pwd As %String, full As %String) As %Status
 {
     If ##class(Security.Users).Exists(name) {
-        Write "  user ", name, " (既存)", !
-        Return $$$OK
+        // デモの共通パスワードに合わせて上書き(再実行で TalkAs のログインが確実に通るように)。
+        Set props("Password") = pwd
+        Set sc = ##class(Security.Users).Modify(name, .props)
+        If $$$ISOK(sc) { Write "  user ", name, " (既存: パスワードを既定に更新)", ! }
+        Else { Write "  user ", name, " (既存: パスワード更新失敗 ", $System.Status.GetErrorText(sc), ")", ! }
+        Return sc
     }
     Set sc = ##class(Security.Users).Create(name, role, pwd, full, "DEMO")
     If $$$ISOK(sc) Write "  user ", name, " 作成(role=", role, ")", !

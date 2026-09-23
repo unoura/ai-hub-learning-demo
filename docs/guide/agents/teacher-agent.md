@@ -87,7 +87,9 @@ DEMO> do ##class(Demo.Teacher.Security).SetupRBAC()
 > アプリ権限だけのユーザはそもそも名前空間で動けません。この分離自体がハーネスの設計思想です。
 >
 > 簡易的措置: デモ用にユーザを直接作成しています。本番は既存の認証基盤(LDAP / OAuth / Delegated 等)に接続します。
-> パスワードはローカルデモ専用です。後始末は `do ##class(Demo.Teacher.Security).Teardown()`。
+> 2ユーザの**共通パスワードは `demo`**(ローカルデモ専用。`TalkAs` のログインで入力します)。既に作成済みでも
+> `SetupRBAC()` を再実行すればパスワードは `demo` に揃います。引数で上書きも可(`SetupRBAC("別のpwd")`)。
+> 後始末は `do ##class(Demo.Teacher.Security).Teardown()`。
 
 ## 手順 2: 教材と検索索引を作る
 
@@ -249,6 +251,9 @@ DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("student01")   ; 生徒(出題・採
 DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("qadmin01")    ; 設問管理者(作問)
 ```
 
+- **入口でパスワードを尋ねます**(IRIS 標準の `%Library.Prompt.GetPassword` を使用。入力は**伏せ字=非表示**)。
+  デモの共通パスワードは **`demo`**(`SetupRBAC` が設定)。ここで **`$SYSTEM.Security.Login` が実際に走る**ので、
+  お客様は「別ユーザとしてプラットフォームにログインし直している」ことを目で確認できます。
 - 対話の**冒頭で、エージェントが「いまできること」を自己紹介**します。この案内は**見えるツールに
   基づく**ので、生徒なら出題・採点・成績表、設問管理者なら作問、と**ロールで内容が自動的に変わり**、
   利用者は最初に何を頼めるか分かります(できることの開示自体がハーネスの権限に沿っている)。
