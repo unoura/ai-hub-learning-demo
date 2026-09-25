@@ -66,27 +66,30 @@ ClassMethod ShowToolsFor(username As %String, pwd As %String = "demo") As %Statu
 ClassMethod ShowAudit(n As %Integer = 10) As %Status
 {
     Write "=== 永続監査ログ(直近 ", n, " 件)===", !
-    Set sql = "SELECT TOP ? CreatedAt, Username, ToolName, Success, DurationMs, Arguments "
+    Set sql = "SELECT TOP ? CreatedAt, RunId, Seq, Kind, Username, ToolName, Success, DurationMs, Arguments "
             _ "FROM Demo_Teacher_Audit.ToolCallLog ORDER BY ID DESC"
     Set rs = ##class(%SQL.Statement).%ExecDirect(, sql, n)
     Set count = 0
     While rs.%Next() {
         Set count = count + 1
-        Write "  ", rs.CreatedAt, "  ", $Justify(rs.Username, 10), "  ",
-              $Select(rs.Success: "✓", 1: "✗"), " ", rs.ToolName,
-              "  (", rs.DurationMs, "ms)", !
+        // Run は trajectory 表示と同じ先頭 8 桁。#Seq はラン内の事象の連番、種別は tool 以外(承認・認可)だけ添える。
+        Write "  ", rs.CreatedAt, "  Run:", $Select(rs.RunId = "": "-", 1: $Extract(rs.RunId, 1, 8) _ $Select(rs.Seq = "": "", 1: "#" _ rs.Seq)), "  ", $Justify(rs.Username, 10), "  ",
+              $Select(rs.Success: "✓", 1: "✗"), " ", $Select((rs.Kind = "") || (rs.Kind = "tool"): "", 1: "[" _ rs.Kind _ "] "), rs.ToolName,
+              $Select((rs.Kind = "") || (rs.Kind = "tool"): "  (" _ rs.DurationMs _ "ms)", 1: ""), !
         Write "      args: ", $Extract(rs.Arguments, 1, 90), !
     }
     If count = 0 { Write "  (監査ログは空です。RunLessonAs / TalkAs でツールを実行すると記録されます)", ! }
     Return $$$OK
 }
 
-/// 監査ログを消去する(デモのやり直し用)。監査証跡は Setup.Rebuild では消さないため別メソッドにする。
+/// 監査ログ(ツール実行・承認/認可の事象と、ラン記録 RunLog)を消去する(デモのやり直し用)。
+/// 監査証跡は Setup.Rebuild では消さないため別メソッドにする。
 ///
 ///   >>> do ##class(Demo.Teacher.RunAs).ClearAudit()
 ClassMethod ClearAudit() As %Status
 {
     Do ##class(Demo.Teacher.Audit.ToolCallLog).%KillExtent()
+    Do ##class(Demo.Teacher.Audit.RunLog).%KillExtent()
     Write "[audit] 監査ログを消去しました。", !
     Return $$$OK
 }

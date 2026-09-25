@@ -114,13 +114,35 @@
 > - **記録される `$USERNAME` は切替後のデモユーザ**(監査は Login 後のプロセスで走るため)。RBAC で
 >   ツールが割れることと、その実行が別ユーザ名で監査に残ることを 1 セットで見せられる(実機確認:
 >   CompareActions で student01=GradeMyAnswer / qadmin01=RegisterQuestion、RunLessonAs でも同様に記録)。
-> - **正直な位置づけ**: 記録されるのは**実際に実行されたツールだけ**。`%CanList` で除外された呼び出しは
->   実行に入らない(`ToolNotFound`)ので監査には残らない(拒否そのものを残したいなら認可ポリシー側で記録)。
+> - **正直な位置づけ**: `%CanList` で除外されたツールは呼び出し自体が起きない(`ToolNotFound`)ので監査には残らない。
+>   `%CanExecute` での拒否と承認の判断は、後述の RunLog 導入時に認可ポリシー側で記録するようにした。
 >   `%AI.Policy.ConsoleAudit`(stdout・揮発)ではなく永続版を選択。IRIS の「システム監査 DB」
 >   (`$SYSTEM.Security.Audit`)とは別枠。deterministic replay の専用 API は無いので「厳密な再実行」ではなく
 >   「起きたツール実行の証跡」と位置づけ、trajectory(過程)と補完関係にある。
 > - 見せ方: `Demo.Teacher.RunAs.ShowAudit(n)`(直近 n 件を「誰が・成否・ツール・所要 ms・引数」で表示)/
 >   `ClearAudit()`(証跡なので `Setup.Rebuild()` では消さず、独立メソッドで消去)。
+>
+> ### ラン記録(RunLog)と事象の連番(Seq)を採用(aihub-demo の設計に揃える)
+>
+> SDK の Session / Response には**ラン ID・状態・時刻が無い**ため、「どの実行の・誰の・どう終わった軌跡か」を
+> 特定できなかった。→ 兄弟リポジトリ aihub-demo(`Demo.Admission.Audit.RunLog`)と同じ3層の ID を付与した。
+>
+> - **ID 階層**: SessionId(会話。`TalkWith` / `RunLessonWith` が採番)⊃ RunId(1ラン = `agent.Run` 1回 = 対話の
+>   1ターン。GUID 全長、Unique)⊃ Seq(ラン内の事象の連番)。画面には RunId の先頭 8 桁を出す。
+> - **`Demo.Teacher.Audit.RunLog`**: 1ラン1行(SessionId / TurnNo / Username / Prompt / FinalAnswer /
+>   Status=running→completed|failed / ErrorText / 反復 / 所要秒 / Stats)。`Begin` → `Complete` / `Fail` → `Clear`。
+> - **ラン文脈はプロセス私有グローバル `^||Demo.Teacher.Traj`**(run / session / seq / t0)。監査ポリシーと
+>   認可ポリシーは SDK から呼ばれるだけで引数にラン情報が無いので、ここから「いまのランの何番目か」を知る。
+>   `^||` は JOB 子に引き継がれないので、`RunLessonAs` では子プロセス内(`RunLessonWith`)で立てる。
+>   ObjectScript に Finally は無いため、Run を Try/Catch で包み、**その後で必ず `Clear()`**(例外時の文脈漏れを防ぐ)。
+> - **事象は ToolCallLog に同じ Seq で並べる**: ツール実行(`Kind=tool`、`PersistentAudit`)に加え、実行前の判断
+>   ——承認ゲートの承認・却下・差し戻し(`approval`)と `%CanExecute` の権限拒否(`authorization`)——を
+>   `RoleGuard` が `ToolCallLog.LogEvent` で記録する(これらは実行に入らず `%LogExecution` を通らないため)。
+>   新規プロパティ(SessionId / Seq / Kind)は、Storage をソースに持たないクラスなので**末尾に追加**(既存行の格納位置を保つ)。
+> - **軌跡の表示(`ShowTrajectory`)は会話履歴を骨格にし、監査事象を ToolCallId で突き合わせる**。SearchPolicy
+>   (KnowledgeBase)は ToolSet 外で監査ポリシーを通らず Seq を持たないため、監査表だけで描くと抜けるから。
+>   表示するのは権限を落としたデモユーザで、監査表の SQL 権限を持たないので、**埋め込み SQL とオブジェクト
+>   アクセス(`RunIdIdxOpen`)で読む**(実行時の SQL 権限チェックを受けない。aihub-demo と同じ扱い)。
 >
 > ### 人手承認・フィードバック(human-in-the-loop)を採用(第7段で追加)
 >
@@ -476,8 +498,8 @@ Class Demo.Teacher.Monitor Extends %RegisteredObject   // 基底クラス不要�
 |---|---|---|
 | identity | 起動時に受講者/監査ユーザを作成し `JOB` 子で `Security.Login` | 既存 IdP(LDAP/OAuth/Delegated 認証)に接続、Web/REST の認証済みコンテキストで実行 |
 | ポリシー | 1クラス `RoleGuard` に `%CanList`/`%CanExecute`(+ 書き込み系の人手承認)を集約 | リソース/ロール設計を組織の RBAC に合わせ、`%AI.Policy.Discovery` で動的カタログ整形も検討 |
-| 人手承認 | `%CanExecute` で書き込み系を止め、承認/却下/フィードバックを端末で1行入力(`RunLessonAs` は自動承認) | 承認待ちキュー/非同期承認(別 UI・別担当者)、承認記録の監査、差し戻し理由の構造化 |
-| 監査 | trajectory(session 再構成)+ **永続監査 `%AI.Policy.Audit`(採用済み)** = `Demo.Teacher.Audit.ToolCallLog` に DB 永続化 | 監査ログを SIEM 連携。保持期間/改ざん防止、拒否イベントの記録も認可ポリシー側で拡張 |
+| 人手承認 | `%CanExecute` で書き込み系を止め、承認/却下/フィードバックを端末で1行入力(`RunLessonAs` は自動承認)。判断は `approval` 事象として監査に残る | 承認待ちキュー/非同期承認(別 UI・別担当者)、承認者の記録、差し戻し理由の構造化 |
+| 監査 | trajectory(session 再構成)+ **永続監査 `%AI.Policy.Audit`(採用済み)** = `Demo.Teacher.Audit.ToolCallLog` に DB 永続化。ラン記録 `RunLog` と連番 Seq、承認・権限拒否の事象も記録 | 監査ログを SIEM 連携。保持期間/改ざん防止、KnowledgeBase 検索の監査 |
 | 埋め込み | FastEmbed(384次元、ローカル) | 用途に応じ高次元モデル / OpenAI 埋め込み(Wallet 再利用)、再インデックス運用 |
 | 教材量 | ポリシー数条 + 練習問題数問 | 実ドキュメント群を `AddDocument`/`ReindexDocument` で継続投入 |
 

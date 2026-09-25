@@ -11,17 +11,21 @@ Class Demo.Teacher.Monitor Extends %RegisteredObject
 /// 観測した反復回数。
 Property Iterations As %Integer [ InitialExpression = 0 ];
 
+/// 1 にすると画面へ何も書かず、反復回数の記録だけを行う(対話モードで応答を読みやすく保つため)。
+Property Quiet As %Boolean [ InitialExpression = 0 ];
+
 /// 反復開始フック(LLM 呼び出し前)。
 Method OnIterationStart(iteration As %Integer, maxIter As %Integer, session As %AI.Agent.Session)
 {
     Set ..Iterations = iteration
+    Quit:..Quiet
     Write "  [反復 ", iteration, "/", maxIter, "] 推論中…", !
 }
 
 /// 反復完了フック(LLM 応答+ツール実行の後)。累計トークンを表示する。
 Method OnIterationComplete(iteration As %Integer, response As %AI.LLM.Response, session As %AI.Agent.Session)
 {
-    If $IsObject(response.Usage) {
+    If '..Quiet, $IsObject(response.Usage) {
         Write "      トークン(累計): ", response.Usage."total_tokens", !
     }
 }

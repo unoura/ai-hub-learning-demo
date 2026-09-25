@@ -140,9 +140,20 @@ ClassMethod RunLessonWith(agent As Demo.Teacher.Teacher, goal As %String, maxIte
         Set session = agent.CreateSession()
         Set monitor = ##class(Demo.Teacher.Monitor).%New()
         Write "=== ゴール ===", !, goal, !, "=== 反復(ハーネスの観測点)===", !
-        Set response = agent.Run(session, goal, maxIterations, monitor)
-        // 実際のツール呼び出し明細はセッション履歴から描く。
-        Do ..ShowTrajectory(session)
+        // ラン(RunLog)を開き、失敗しても必ず閉じてラン文脈を片付ける(ObjectScript に Finally は無い)。
+        Set sessionId = $System.Util.CreateGUID()
+        Set runId = ##class(Demo.Teacher.Audit.RunLog).Begin(sessionId, goal, 1, maxIterations)
+        Set runErr = ""
+        Try {
+            Set response = agent.Run(session, goal, maxIterations, monitor)
+            Do ##class(Demo.Teacher.Audit.RunLog).Complete(runId, session, response, monitor.Iterations)
+        } Catch runErr {
+            Do ##class(Demo.Teacher.Audit.RunLog).Fail(runId, runErr, monitor.Iterations)
+        }
+        Do ##class(Demo.Teacher.Audit.RunLog).Clear()
+        // 実際のツール呼び出し明細はセッション履歴と監査の事象から描く。
+        Do ..ShowTrajectory(session, 0, runId)
+        If $IsObject(runErr) Throw runErr
         Write "=== 最終応答 ===", !
         Do ..Say(response.Content)
         Write !
@@ -186,6 +197,8 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
         // コマンド案内(ヘッダ・各応答のあと・/help で同じ文言を出す)。
         Set cmds = "/trace: 直前の応答の軌跡と集計  /quit: 終了"
         Set session = agent.CreateSession()
+        // 会話 ID(RunLog の SessionId)とターン番号。ターンごとのラン(RunId)をこの会話で束ねる。
+        Set sessionId = $System.Util.CreateGUID(), turnNo = 0
         Write gray, "============================================================", clr, !
         Write bold, cy, "  先生エージェント (AI Hub / 情報セキュリティ・コンプライアンス研修)", clr, !
         Write gray, "  見える・使えるツールは実行ユーザのロール(RBAC)で変わります", clr, !
@@ -197,8 +210,8 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
         // 最初に、いま使えるツールに基づいて「できること」を開示する。
         // ツールはロール(RBAC)で絞られているので、開示内容も呼び出し元のロールで自動的に変わる。
         Do ..Greet(agent, session, maxIterations)
-        // 直前ターンの trajectory 起点。/trace で当該ターン分だけ描くために覚えておく(-1=未実行)。
-        Set lastFrom = -1
+        // 直前ターンの trajectory 起点とラン情報。/trace で当該ターン分だけ描くために覚えておく(-1=未実行)。
+        Set lastFrom = -1, lastRun = ""
         For {
             Write !, blue, bold, "あなた(", $Username, ")", clr, blue, "> ", clr
             // READ は Enter で改行を出さないので、読み終えたら改行する。
@@ -212,7 +225,7 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
                 If lastFrom<0 {
                     Write gray, "  (まだ表示できる軌跡がありません。先に質問してください。)", clr, !
                 } Else {
-                    Do ..ShowTrajectory(session, lastFrom)
+                    Do ..ShowTrajectory(session, lastFrom, lastRun)
                     Set st = session.GetStats()
                     Write "=== 集計(累計)===", !, "ツール呼び出し ", st."total_tool_calls", " 回 / トークン ", st."total_prompt_tokens" + st."total_completion_tokens", !
                 }
@@ -228,11 +241,27 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
             // 進捗表示はグレーで控えめに出す。
             Write gray, "  (考え中…)", clr, !
             // 通常のターンは応答だけを返す(会話を読みやすく保つ)。軌跡は /trace で見せる。
-            Set response = agent.Run(session, goal, maxIterations, "")
-            Set lastFrom = from
-            Write cy, bold, "先生", clr, cy, "> ", clr, !
-            Do ..Say(response.Content)
-            Write !
+            // ターンごとにラン(ID・実行ユーザ・状態)を記録し、失敗しても対話は続ける。
+            Set turnNo = turnNo + 1
+            Set runId = ##class(Demo.Teacher.Audit.RunLog).Begin(sessionId, goal, turnNo, maxIterations)
+            Set monitor = ##class(Demo.Teacher.Monitor).%New()
+            Set monitor.Quiet = 1
+            Set runErr = ""
+            Try {
+                Set response = agent.Run(session, goal, maxIterations, monitor)
+                Do ##class(Demo.Teacher.Audit.RunLog).Complete(runId, session, response, monitor.Iterations)
+            } Catch runErr {
+                Do ##class(Demo.Teacher.Audit.RunLog).Fail(runId, runErr, monitor.Iterations)
+            }
+            Do ##class(Demo.Teacher.Audit.RunLog).Clear()
+            Set lastFrom = from, lastRun = runId
+            If $IsObject(runErr) {
+                Write ..#RED, "エラー: ", runErr.DisplayString(), clr, !
+            } Else {
+                Write cy, bold, "先生", clr, cy, "> ", clr, !
+                Do ..Say(response.Content)
+                Write !
+            }
             Write gray, "  ", cmds, clr, !
         }
         Write !, gray, "=== 終了 ===", clr, !
@@ -255,32 +284,106 @@ ClassMethod Greet(agent As Demo.Teacher.Teacher, session As %AI.Agent.Session, m
     Write !
 }
 
-/// セッションの会話履歴から trajectory(質問→判断→ツール呼び出し→ツール結果→回答)を描く。
-/// from を指定すると、その位置以降のメッセージだけを描く(対話モードで当該ターン分だけ出すため)。
-ClassMethod ShowTrajectory(session As %AI.Agent.Session, from As %Integer = 0) As %Status
+/// 1ランの trajectory(要求→判断→ツール呼び出し→ツール結果→回答)を描く。
+/// 骨格はセッションの会話履歴(from 以降のメッセージ = 当該ターン分)。そこへ永続監査(ToolCallLog)の
+/// 事象を ToolCallId で突き合わせ、ラン内連番 Seq の順に「承認・認可の判断 → ツール実行(所要 ms)」を並べる。
+/// 会話履歴を骨格にするのは、監査ポリシーを通らないツール(SearchPolicy = KnowledgeBase)も漏らさず出すため。
+/// runId(RunLog)を渡すと、見出しにラン ID(先頭 8 桁)・実行ユーザ・状態・反復・所要秒を出す。
+/// 表示は兄弟リポジトリ aihub-demo の /trace に揃える。
+///
+/// 表示するのは RunAs で切り替えたデモユーザ(監査表の SQL 権限なし)なので、動的 SQL ではなく
+/// 埋め込み SQL とオブジェクトアクセス(RunIdIdxOpen)で読む(実行時の SQL 権限チェックを受けない)。
+ClassMethod ShowTrajectory(session As %AI.Agent.Session, from As %Integer = 0, runId As %String = "") As %Status
 {
-    Write "=== trajectory(思考と行動の連鎖)===", !
+    Set cy = ..#CY, green = ..#GREEN, gray = ..#GRAY, red = ..#RED, bold = ..#BOLD, clr = ..#CLR
+    Set rule = "============================================================"
+    Set run = $Select(runId = "": "", 1: ##class(Demo.Teacher.Audit.RunLog).RunIdIdxOpen(runId))
+    // 要求(このランの最初の利用者メッセージ)と最終回答(最後のツール呼び出しなし応答)。RunLog にあればそちらを使う。
+    Set goal = "", final = ""
     For i = from:1:session.MessageCount()-1 {
         Set m = session.GetMessage(i)
-        Set role = m.role
-        If role = "user" {
-            Write "  👤 質問: ", ..OneLine(m.content, 60), !
-        }
-        ElseIf role = "assistant" {
-            If $IsObject(m.%Get("tool_calls")) {
-                Set it = m.%Get("tool_calls").%GetIterator()
-                While it.%GetNext(.k, .tc) {
-                    Write "  🤖→🔧 ツール呼び出し: ", tc.name, " ", ..OneLine($Select($IsObject(tc.arguments): tc.arguments.%ToJSON(), 1: tc.arguments), 80), !
-                }
-            }
-            Else {
-                Write "  🤖 回答を生成(", $Length(m.content), " 文字)", !
-            }
-        }
-        ElseIf role = "tool" {
-            Write "  🔧→🤖 ツール結果: ", ..OneLine(m.content, 50), "…", !
-        }
+        If (m.role = "user"), (goal = "") Set goal = m.content
+        If (m.role = "assistant"), '$IsObject(m.%Get("tool_calls")) Set final = m.content
     }
+    If $IsObject(run) {
+        Set:run.Prompt'="" goal = run.Prompt
+        Set:run.FinalAnswer'="" final = run.FinalAnswer
+    }
+
+    Write !, gray, rule, clr, !
+    Write bold, cy, "  トラジェクトリ(1ランの軌跡 / Trajectory)", clr, !
+    If $IsObject(run) {
+        Write gray, "  Run: ", clr, $Extract(run.RunId, 1, 8),
+              gray, "   実行ユーザ: ", clr, green, run.Username, clr,
+              gray, "   状態: ", clr, $Select(run.Status = "completed": green, 1: red), run.Status, clr, !
+    }
+    Write gray, "  要求: ", clr, ..OneLine(goal, 60), !
+    If $IsObject(run) {
+        Write gray, "  反復: ", run.Iterations, "/", run.MaxIterations, "   所要: ", $FNumber(run.Seconds, "", 2), " 秒", clr, !
+        If run.ErrorText '= "" Write red, "  エラー: ", ..OneLine(run.ErrorText, 70), clr, !
+    }
+    Write gray, rule, clr, !
+
+    // このランの監査事象を ToolCallId・Seq で引けるようにする: evt(callId, seq) = $lb(kind, 成否, ms, 説明)。
+    // 説明は記録時の要約(承認/却下/差し戻し: 指示 など)。無ければエラー文。
+    Kill evt
+    If runId '= "" {
+        &sql(DECLARE TrajEvt CURSOR FOR
+             SELECT Seq, Kind, ToolCallId, Success, DurationMs, ResultPreview, ErrorText
+               INTO :seq, :kind, :cid, :ok, :ms, :preview, :errText
+               FROM Demo_Teacher_Audit.ToolCallLog
+              WHERE RunId = :runId
+              ORDER BY Seq)
+        &sql(OPEN TrajEvt)
+        For {
+            &sql(FETCH TrajEvt)
+            Quit:SQLCODE'=0
+            Set evt($Select(cid = "": " ", 1: cid), +seq) = $ListBuild(kind, ok, ms, $Select(preview '= "": preview, 1: errText))
+        }
+        &sql(CLOSE TrajEvt)
+    }
+
+    // ステップ: 事象ごとに1行(種別・ツール名・所要 ms)+ 説明/結果プレビュー1行。
+    // tool_call_id → ツール名 を assistant の tool_calls から引けるようにしておく。
+    Set step = 0
+    For i = from:1:session.MessageCount()-1 {
+        Set m = session.GetMessage(i)
+        If m.role = "assistant", $IsObject(m.%Get("tool_calls")) {
+            Set it = m.%Get("tool_calls").%GetIterator()
+            While it.%GetNext(.k, .tc) { Set names(tc.id) = tc.name }
+            Continue
+        }
+        Continue:m.role'="tool"
+        Set callId = m.%Get("tool_call_id"), name = $Get(names(callId), "?")
+        // (a) 実行前の判断(承認・認可の拒否)。拒否されたらツールは実行されない。
+        Set ran = 0, blocked = 0, toolRec = ""
+        Set seq = ""
+        For {
+            Set seq = $Order(evt(callId, seq), 1, e)
+            Quit:seq=""
+            If $ListGet(e, 1) = "tool" { Set toolRec = e  Continue }
+            Set ok = $ListGet(e, 2), blocked = blocked || 'ok
+            Set label = $Select($ListGet(e, 1) = "approval": "Approval", 1: "Authz")
+            Set step = step + 1
+            Write $Justify(step, 4), "  ", $Select(ok: green, 1: red), $Extract(label _ "          ", 1, 10), clr,
+                  bold, $Extract(name _ "                  ", 1, 18), clr, !
+            Write "        ", $Select(ok: gray, 1: red), ..OneLine($ListGet(e, 4), 70), clr, !
+        }
+        // 拒否された呼び出しは、上の判断の行が結果そのもの(ツール結果はその拒否メッセージ)。
+        Continue:blocked&&(toolRec="")
+        // (b) ツール実行。所要 ms・成否は監査ポリシーの記録から(SearchPolicy のように監査を通らないツールには無い)。
+        Set failed = (toolRec '= "") && '$ListGet(toolRec, 2)
+        Set ms = $Select(toolRec = "": "", 1: "[" _ $ListGet(toolRec, 3) _ "ms]")
+        Set content = m.content
+        Set step = step + 1
+        Write $Justify(step, 4), "  ", $Select(failed: red, 1: cy), $Extract($Select(failed: "Error", 1: "Tool") _ "          ", 1, 10), clr,
+              bold, $Extract(name _ "                  ", 1, 18), clr, " ", gray, ms, clr, !
+        Write "        ", $Select(failed: red, 1: gray), ..OneLine(content, 70), $Select($Length(content) > 70: "...", 1: ""), clr, !
+    }
+    If step = 0 Write gray, "  (ツール呼び出しなし)", clr, !
+
+    Write gray, "── 最終回答 ────────────────────────────", clr, !
+    Write "  ", ..OneLine(final, 70), $Select($Length(final) > 70: "...", 1: ""), !
     Return $$$OK
 }
 

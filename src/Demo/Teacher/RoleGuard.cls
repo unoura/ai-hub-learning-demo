@@ -41,23 +41,34 @@ Method %CanList(tool As %String, metadata As %DynamicObject) As %Boolean
 Method %CanExecute(tool As %String, call As %DynamicObject, metadata As %DynamicObject) As %Status
 {
     // (1) RBAC: 必要リソースの USE 権限が無ければ拒否(二重ガード)。
+    //     拒否された呼び出しは実行に入らず監査ポリシーを通らないので、ここで事象として記録する。
+    Set name = ..ToolName(tool, call)
     Set resource = ..RequiredResource(metadata)
     If resource '= "", '$SYSTEM.Security.Check(resource, "USE") {
-        Return $$$ERROR($$$AICoreToolAccessDenied, "権限がありません(必要リソース: " _ resource _ ")")
+        Set sc = $$$ERROR($$$AICoreToolAccessDenied, "権限がありません(必要リソース: " _ resource _ ")")
+        Do ##class(Demo.Teacher.Audit.ToolCallLog).LogEvent("authorization", name, call, sc, "権限なし(" _ resource _ ")")
+        Return sc
     }
 
     // (2) 人手承認ゲート(human-in-the-loop): 書き込み系ツールだけ人間に諮る。
-    Set name = ..ToolName(tool, call)
+    //     承認・却下・差し戻しのいずれも、ラン内の連番付きで監査に残す。
     If ..RequiresApproval(name) {
         Set decision = ..Decide(name, call)
-        If decision = "APPROVE" Return $$$OK
+        If decision = "APPROVE" {
+            Do ##class(Demo.Teacher.Audit.ToolCallLog).LogEvent("approval", name, call, $$$OK, "承認されました")
+            Return $$$OK
+        }
         If decision = "REJECT" {
-            Return $$$ERROR($$$AICoreToolAccessDenied, "人間の承認ゲートで却下されました。登録は行いません(ツール: " _ name _ ")。")
+            Set sc = $$$ERROR($$$AICoreToolAccessDenied, "人間の承認ゲートで却下されました。登録は行いません(ツール: " _ name _ ")。")
+            Do ##class(Demo.Teacher.Audit.ToolCallLog).LogEvent("approval", name, call, sc, "却下されました")
+            Return sc
         }
         // それ以外 = 人間のフィードバック(指示)による差し戻し。指示を添えて拒否すると、
         // エージェントは失敗理由=指示を読み、作り直して再度 name を実行する(承認ループ)。
         Set feedback = $Extract(decision, $Length("REVISE:") + 1, *)
-        Return $$$ERROR($$$AICoreToolAccessDenied, "人間のフィードバックにより差し戻されました。次の指示に従って内容を修正し、改めて " _ name _ " を実行してください → " _ feedback)
+        Set sc = $$$ERROR($$$AICoreToolAccessDenied, "人間のフィードバックにより差し戻されました。次の指示に従って内容を修正し、改めて " _ name _ " を実行してください → " _ feedback)
+        Do ##class(Demo.Teacher.Audit.ToolCallLog).LogEvent("approval", name, call, sc, "差し戻し: " _ feedback)
+        Return sc
     }
     Return $$$OK
 }

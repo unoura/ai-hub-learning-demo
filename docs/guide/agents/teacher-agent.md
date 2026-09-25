@@ -34,7 +34,8 @@
 | `Demo.Teacher.RunAs` | 別ユーザの権限で「見えるツール・取れる行動」の違いを実演 |
 | `Demo.Teacher.Monitor` | trajectory の観測(反復数・トークン) |
 | `Demo.Teacher.Audit.PersistentAudit` | 監査ポリシー(`%AI.Policy.Audit`)。ツール実行を DB に永続監査 |
-| `Demo.Teacher.Audit.ToolCallLog` | 永続監査ログ(誰が・いつ・どのツールを・成否・所要 ms) |
+| `Demo.Teacher.Audit.ToolCallLog` | 永続監査ログ(誰が・いつ・どのツールを・成否・所要 ms。承認・認可の判断も同じ連番で記録) |
+| `Demo.Teacher.Audit.RunLog` | ラン記録(1ターン=1ラン。誰の・どの要求が・どう終わったか・最終回答) |
 | `Demo.Teacher.Setup` | 教材データ投入 + ベクトル索引の構築 + 成績表デモ用の履歴 |
 
 ツールと必要リソースの対応(採点・成績と作問はほぼ排他):
@@ -266,18 +267,28 @@ trajectory は「その会話の中で過程を追う」もので、会話が終
 ```objectscript
 DEMO> do ##class(Demo.Teacher.RunAs).ShowAudit()
 === 永続監査ログ(直近 10 件)===
-  2026-09-23 04:57:05    qadmin01  ✓ RegisterQuestion  (0ms)
+  2026-09-23 04:57:05  Run:1B3AE518#3    qadmin01  ✓ RegisterQuestion  (0ms)
       args: {"category":"…","modelAnswer":"…","prompt":"…"}
-  2026-09-23 04:57:05   student01  ✓ GradeMyAnswer  (1ms)
+  2026-09-23 04:57:05  Run:1B3AE518#2    qadmin01  ✓ [approval] RegisterQuestion
+      args: {"category":"…","modelAnswer":"…","prompt":"…"}
+  2026-09-23 04:57:01  Run:1B3AE518#1    qadmin01  ✗ [approval] RegisterQuestion
+      args: {"category":"…","modelAnswer":"…","prompt":"…"}
+  2026-09-23 04:56:40  Run:097901ED#1   student01  ✓ GradeMyAnswer  (1ms)
       args: {"answer":"…","questionId":1}
 ```
 
 - **記録されるユーザ名は切替後のデモユーザ**(`student01` / `qadmin01`)です。監査は Login 後の
   プロセスで走るので `$USERNAME` がそのまま残り、「見えるツールが割れる(RBAC)」ことと
   「その実行が**別ユーザ名で監査に残る**」ことを 1 セットで見せられます。
-- **記録されるのは実際に実行されたツールだけ**です。生徒が作問を頼んでも `%CanList` で
-  カタログに無い(=`ToolNotFound`)ため実行に入らず、監査にも残りません。監査は
-  「起きたこと」を正直に残します(拒否そのものを残したい場合は認可ポリシー側で記録します)。
+- **ツール実行に加えて、実行前の判断も残します**。承認ゲートの承認・却下・差し戻し(`[approval]`)と、
+  権限ゲート `%CanExecute` での拒否(`[authorization]`)は実行に入らないため監査ポリシーを通りませんが、
+  認可ポリシー(`RoleGuard`)が同じ表に記録します。一方、生徒が作問を頼んでも `%CanList` で
+  カタログに無い(=`ToolNotFound`)ツールは、呼び出し自体が起きないので何も残りません。
+- **`Run:1B3AE518#2` は「どのランの何番目の事象か」**です。1ターン(1ラン)ごとに
+  `Demo.Teacher.Audit.RunLog` に1行(誰の・どの要求が・completed / failed・最終回答・所要秒)を作り、
+  その中の事象(ツール実行・承認・認可)に連番 `Seq` を振ります。ID は **会話(SessionId)⊃ ラン(RunId)⊃ 事象(Seq)**
+  の3層で、`RunId` で結んで `Seq` 順に並べれば、会話が終わった後でもそのランの流れを SQL で再構成できます。
+  (設計は兄弟リポジトリ aihub-demo と揃えています。)
 - 取り付けは ToolSet の `<Policies>` に `<Audit Class="Demo.Teacher.Audit.PersistentAudit"/>` を
   1 行足すだけ。`%AI.Policy.ConsoleAudit`(stdout に出すだけ・揮発)と違い、DB に残るので後から
   SQL で集計・照会できます(IRIS の「システム監査 DB」= `$SYSTEM.Security.Audit` とは別枠)。
@@ -322,8 +333,8 @@ DEMO> do ##class(Demo.Teacher.RunAs).ShowAudit()
   RBAC を通した**あと**で承認を求めます(生徒には作問ツールがそもそも見えないので承認の出番もありません)。
 - **フィードバック = エージェントへの差し戻し指示**: 承認ゲートは `%CanExecute` で実行を止め、**人間の指示を
   「失敗理由」としてエージェントに返し**ます。エージェントはそれを読んで作り直す(=人間が最終決定しつつ、
-  修正は AI に任せる)。**監査に残るのは承認・実行された 1 件だけ**で、差し戻された試行は実行に入らないため
-  監査には出ません(見どころ 5)。
+  修正は AI に任せる)。差し戻し・却下された試行は実行に入りませんが、**判断そのものは `[approval]` として
+  監査に残ります**(見どころ 5)。「何度差し戻して、どれを承認したか」を後から追えます。
 - **承認は端末が要る**: 対話 `TalkAs`(在プロセス=端末あり)で人間が承認します。単発の `RunLessonAs`
   (端末を持たない JOB 子)は**非対話のため自動承認**し、その旨を注記します(承認の実演は `TalkAs` で行う、
   という役割分担)。
@@ -350,6 +361,10 @@ DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("qadmin01")    ; 設問管理者(作
   利用者は最初に何を頼めるか分かります(できることの開示自体がハーネスの権限に沿っている)。
 - 通常は**応答だけ**を返してクリーンに会話できます。**軌跡(思考と行動の連鎖)を見たいときは
   `/trace` と入力**すると、直前の応答の trajectory と集計(ツール呼び出し数・トークン)を表示します。
+  trajectory の見出しには **Run(ラン ID の先頭 8 桁)・実行ユーザ・状態(completed / failed)** が出ます。
+  同じ Run ID がラン記録(`RunLog`)と永続監査ログ(`ToolCallLog.RunId`)に残るので、画面の軌跡から
+  監査証跡をたどれます。承認ゲートの判断は `Approval` の行として、ツール実行の直前に出ます
+  (承認は緑、却下・差し戻しは赤)。
   この案内は開始時と各応答のあとに毎回画面に出るので、利用者はいつでも過程を追えると分かります
   (`/help` でコマンド一覧、`quit`/空行で終了)。
 
@@ -374,11 +389,17 @@ Model    : us.anthropic.claude-sonnet-4-6
   /trace: 直前の応答の軌跡と集計  /quit: 終了
 
 あなた(student01)> /trace
-=== trajectory(思考と行動の連鎖)===
-  👤 質問: 設問1に「…」と答えます。採点して。
-  🤖→🔧 ツール呼び出し: GradeMyAnswer {"questionId":1,"answer":"…"}
-  🔧→🤖 ツール結果: {"value":{"score":100, …}}…
-  🤖 回答を生成(… 文字)
+
+============================================================
+  トラジェクトリ(1ランの軌跡 / Trajectory)
+  Run: 7D355AB9   実行ユーザ: student01   状態: completed
+  要求: 設問1に「12文字以上、記号を混ぜる、使い回さない」と答えます。採点して。
+  反復: 1/6   所要: 7.86 秒
+============================================================
+   1  Tool      GradeMyAnswer      [0ms]
+        {"citation":"情報セキュリティ規程 第12条","comment":"100点(3/3 観点)…
+── 最終回答 ────────────────────────────
+  採点結果は100点です。…
 === 集計(累計)===
 ツール呼び出し … 回 / トークン …
 ```

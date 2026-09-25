@@ -56,6 +56,14 @@ Method %LogExecution(call As %DynamicObject, metadata As %DynamicObject, result 
             Set log.ErrorText = $SYSTEM.Status.GetErrorText(status)
         }
 
+        // 実行中のラン(Demo.Teacher.Audit.RunLog が文脈を立てる)に紐づけ、ラン内の連番を振る。
+        // 認可・承認の事象(ToolCallLog.LogEvent)と同じ連番を共有するので、Seq 順に並べると軌跡になる。
+        Set log.Kind = "tool"
+        Set log.RunId = ##class(Demo.Teacher.Audit.RunLog).CurrentRunId()
+        If log.RunId '= "" {
+            Set log.SessionId = ##class(Demo.Teacher.Audit.RunLog).CurrentSessionId()
+            Set log.Seq = ##class(Demo.Teacher.Audit.RunLog).NextSeq()
+        }
         Do log.%Save()
     } Catch ex {
         // 監査の失敗をツール実行に波及させない。痕跡はプロセス外グローバルに残す。
