@@ -12,8 +12,6 @@ IRIS の **Secure Wallet** に格納し、アプリからは
 > 対応状況は EAP のビルドで変わるため、最新は [ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/main/ObjectScript_SDK_Guide.md) を参照してください。
 >
 > Secure Wallet は IRIS 2025.3 で導入、2026.1(EM)で一般提供された機能です。
-> 設計・判断根拠(なぜこの構成か、本番運用との違い)は
-> [../../design/building-blocks/wallet.md](../../design/building-blocks/wallet.md) を参照。
 
 ## 方針: キーは「手動登録」のみ(環境変数に出さない)
 

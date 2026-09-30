@@ -15,8 +15,6 @@ Wallet 構成要素で登録した API キーを **ConfigStore の名前参照�
 > このデモで他のプロバイダを使うには、`register-key.sh` にそのプロバイダの登録を足し、`Base` の
 > `PROVIDERPRIORITY` に名前を加えます(Ollama なら `model_provider="openai"` + `base_url` の設定を登録)。
 
-> 設計・判断根拠は [../../design/agents/plain-agent.md](../../design/agents/plain-agent.md) を参照。
-
 ## エージェントクラス(2クラス)
 
 `src/Demo/Agent/` に、共通ベース1つと、それを継承したプレインエージェント1つを置いています。

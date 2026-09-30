@@ -17,5 +17,3 @@
 
 - [agents/plain-agent.md](agents/plain-agent.md) — プレインエージェント(ツールを持たない最小構成)
 - [agents/teacher-agent.md](agents/teacher-agent.md) — 先生エージェント(権限で振る舞いが変わる発展形)
-
-「なぜその構成にしたか」は [../design/](../design/) を参照してください。

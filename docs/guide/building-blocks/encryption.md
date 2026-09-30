@@ -3,9 +3,6 @@
 IRIS のセキュリティデータベース `IRISSECURITY` を暗号化し、そこに格納される認証情報・Wallet の
 シークレットを**保存時(at-rest)で保護**します。次の構成要素で Wallet に入れる API キーが暗号化されます。
 
-> 設計・判断根拠(なぜこの機構か、本番運用との違い)は
-> [../../design/building-blocks/encryption.md](../../design/building-blocks/encryption.md) を参照。
-
 ## 仕組み(概要)
 
 初回起動時に、コンテナが自動で以下を実行します(`docker/first-boot-encrypt.sh`):

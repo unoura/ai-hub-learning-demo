@@ -63,26 +63,23 @@ API キーは**保存時(at-rest)にも暗号化**されます。ソースや設
 
 ## ドキュメント構成
 
-ドキュメントは目的別に分けています。
-
-- **[docs/guide/](docs/guide/)** — 聴衆向け。完成した手順と説明。まずはここから。
-  通しで実践する手順は **[docs/guide/demo-runbook.md](docs/guide/demo-runbook.md)(実践ガイド)** を参照。
-- **[docs/design/](docs/design/)** — 設計・判断根拠。なぜその構成にしたか。
+手順と説明は **[docs/guide/](docs/guide/)** にあります。通しで実践する手順は
+**[docs/guide/demo-runbook.md](docs/guide/demo-runbook.md)(実践ガイド)** を参照してください。
 
 **構成要素(building-blocks)** — エージェントが安全に動く土台:
 
-| 構成要素 | ガイド | 設計 |
-|---|---|---|
-| Docker で動作する IRIS 環境 | [guide](docs/guide/building-blocks/docker.md) | [design](docs/design/building-blocks/docker.md) |
-| IRISSECURITY の暗号化 | [guide](docs/guide/building-blocks/encryption.md) | [design](docs/design/building-blocks/encryption.md) |
-| Wallet で OpenAI / Claude / Bedrock のキー受け渡し | [guide](docs/guide/building-blocks/wallet.md) | [design](docs/design/building-blocks/wallet.md) |
+| 構成要素 | ガイド |
+|---|---|
+| Docker で動作する IRIS 環境 | [guide](docs/guide/building-blocks/docker.md) |
+| IRISSECURITY の暗号化 | [guide](docs/guide/building-blocks/encryption.md) |
+| Wallet で OpenAI / Claude / Bedrock のキー受け渡し | [guide](docs/guide/building-blocks/wallet.md) |
 
 **エージェント(agents)** — 上記の土台の上で動かす:
 
-| エージェント | ガイド | 設計 |
-|---|---|---|
-| プレインエージェント(会話するだけの最小構成) | [guide](docs/guide/agents/plain-agent.md) | [design](docs/design/agents/plain-agent.md) |
-| 先生エージェント(権限で振る舞いが変わる発展形) | [guide](docs/guide/agents/teacher-agent.md) | [design](docs/design/agents/teacher-agent.md) |
+| エージェント | ガイド |
+|---|---|
+| プレインエージェント(会話するだけの最小構成) | [guide](docs/guide/agents/plain-agent.md) |
+| 先生エージェント(権限で振る舞いが変わる発展形) | [guide](docs/guide/agents/teacher-agent.md) |
 
 ## リポジトリ構成
 
@@ -118,10 +115,9 @@ API キーは**保存時(at-rest)にも暗号化**されます。ソースや設
 │       │                         データ: 社内規程 / 設問 / 模範解答・採点基準 / 学習履歴
 │       └── Audit/                永続監査: PersistentAudit(監査ポリシー)/ ToolCallLog(事象)/ RunLog(ラン)
 ├── docs/
-│   ├── guide/                    聴衆向けの手順と説明(demo-runbook.md = 通しの実践ガイド)
-│   │   ├── building-blocks/      docker.md / encryption.md / wallet.md
-│   │   └── agents/               plain-agent.md / teacher-agent.md
-│   └── design/                   設計・判断根拠(guide と同じ2層構成)
+│   └── guide/                    手順と説明(demo-runbook.md = 通しの実践ガイド)
+│       ├── building-blocks/      docker.md / encryption.md / wallet.md
+│       └── agents/               plain-agent.md / teacher-agent.md
 └── local/                        ローカル専用(Git 管理外。README.md のみコミット)
 ```
 
