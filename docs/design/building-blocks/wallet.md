@@ -81,9 +81,9 @@ Agent Parameter PROVIDERCONFIG = "@{config:AI.LLM.openai}"
 | モデル | ヘルパ第2引数(既定 `gpt-5.6` / `claude-sonnet-5` / `us.anthropic.claude-sonnet-5`) | プロバイダの現行モデル ID に合わせて指定可能。ID は変わりやすいので登録時に確認 |
 | Bedrock 認証 | bearer token を Wallet、`region` は非機密として ConfigStore に平文 | Bedrock は API キーでなく bearer token 認証。リージョンは秘密でない。model はクロスリージョン推論プロファイル ID(`us.` 等の接頭辞)が必要 |
 
-## デモとしての簡易的措置 と 本番運用
+## デモとしての暫定措置 と 本番運用
 
-| 簡易的措置 | 内容 | 本番向け |
+| 暫定措置 | 内容 | 本番向け |
 |---|---|---|
 | キーの供給元 | 人が対話で手入力(非表示)→ 0600 一時ファイル経由で登録 | シークレットマネージャ / KMS / CI のシークレット注入から、アプリ起動時に Wallet へ投入 |
 | ConfigStore 検証 | `validateDetails=0`(`AI.LLM` の descriptor 登録を省略) | `%ConfigStore.DescriptorManager` で descriptor を登録し `validateDetails=1` で設定形を検証 |

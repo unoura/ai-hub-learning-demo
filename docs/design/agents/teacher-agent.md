@@ -213,7 +213,7 @@
 > (`$system.OBJ.Compile("Demo.Teacher.ToolSet","ck")`、`u` 修飾子なし=up-to-date でもやり直す)して確定させる。
 > 手作業で src を再ロードするときも同じ順序を踏むこと。詳細は [[reference-ai-sdk-capabilities]]。
 >
-> ### 簡易的措置(第3段)
+> ### 暫定措置(第3段)
 >
 > - 採点は**語句照合**(サーバ側で完結し自己申告を防ぐのが主目的)。本番は意味照合/LLM 採点へ。
 > - 成績表の本人限定は各ツール内の `WHERE Learner=$Username`。本番は行レベルセキュリティで担保。
@@ -344,7 +344,7 @@ IRIS に格納。エージェントは1つ(`Demo.Agent.Teacher`、プレイン�
 - ディスカバリは `set mgr=##class(%AI.ToolMgr).%New()` → `do mgr.RegisterToolSet("Demo.Teacher.ToolSet")`
   → `set arr=mgr.%Discover()`(`%CanList` が権限で絞った配列が返る)。
 
-> 簡易的措置: デモでは Login 可能な最小ユーザ(受講者用 learner01 / 監査用 auditor01)を
+> 暫定措置: デモでは Login 可能な最小ユーザ(受講者用 learner01 / 監査用 auditor01)を
 > `Demo.Teacher.Security.SetupRBAC()` で作成する(Wallet 構成要素の Resources 作成と同じ流儀)。
 > **ユーザ名はロール名と重複できない**(大文字小文字を無視して衝突すると #942)ため接尾辞 `01` を付けた。
 > 本番は既存の認証(LDAP/OAuth/Delegated 等)に接続する。
@@ -492,9 +492,9 @@ Class Demo.Teacher.Monitor Extends %RegisteredObject   // 基底クラス不要�
   「キーを出さない」思想を一段強調できる。
 - **プレインエージェント**: `Demo.Agent.Base` をそのまま継承 → プロバイダ自動採用の恩恵を引き継ぐ。
 
-## デモとしての簡易的措置 と 本番運用
+## デモとしての暫定措置 と 本番運用
 
-| 簡易的措置 | 内容 | 本番向け |
+| 暫定措置 | 内容 | 本番向け |
 |---|---|---|
 | identity | 起動時に受講者/監査ユーザを作成し `JOB` 子で `Security.Login` | 既存 IdP(LDAP/OAuth/Delegated 認証)に接続、Web/REST の認証済みコンテキストで実行 |
 | ポリシー | 1クラス `RoleGuard` に `%CanList`/`%CanExecute`(+ 書き込み系の人手承認)を集約 | リソース/ロール設計を組織の RBAC に合わせ、`%AI.Policy.Discovery` で動的カタログ整形も検討 |

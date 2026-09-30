@@ -87,7 +87,7 @@ ClassMethod GrantSql() As %Status
     Do ..Grant("SELECT ON Demo_Teacher.Question TO Demo_Runtime")
     // 生徒: 規程・自分の学習履歴の参照。採点基準(AnswerKey)は与えない。
     //   ・出典の引用(GradeMyAnswer)と成績表(ShowReportCard)の SQL に使う。
-    //   ・履歴の本人限定は各ツール内で WHERE Learner=$Username により行う(簡易的措置。
+    //   ・履歴の本人限定は各ツール内で WHERE Learner=$Username により行う(暫定措置。
     //     本番は行レベルセキュリティで担保する)。
     Do ..Grant("SELECT ON Demo_Teacher.Policy TO Demo_Student")
     Do ..Grant("SELECT ON Demo_Teacher.Progress TO Demo_Student")
