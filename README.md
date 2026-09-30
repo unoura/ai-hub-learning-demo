@@ -7,6 +7,10 @@
   呼び出す人の権限(IRIS の RBAC)で見えるツール・取れる行動が変わる。永続監査や人間の承認も備える。
 - **プレインエージェント** — ツールを持たず、LLM と会話するだけの最小構成。
 
+![生徒(student01)として先生エージェントと対話する画面: 出題 → 解答 → 規程に基づく解説 → 成績表](docs/images/talkas-student01.png)
+
+*生徒(student01)として先生エージェントと対話しているところ(`TalkAs`)。出題 → 解答 → 規程を引用した解説 → 成績表の提案。*
+
 ## 事前準備(IRIS イメージのロード)
 
 このデモは AI Hub の早期アクセスプログラム(EAP)版 IRIS コミュニティエディションのコンテナイメージを使います。
@@ -146,6 +150,7 @@ API キーは**保存時(at-rest)にも暗号化**されます。ソースや設
 │       │                         データ: 社内規程 / 設問 / 模範解答・採点基準 / 学習履歴
 │       └── Audit/                永続監査: PersistentAudit(監査ポリシー)/ ToolCallLog(事象)/ RunLog(ラン)
 ├── docs/
+│   ├── images/                   README などで使う画像
 │   └── guide/                    手順と説明(demo-runbook.md = 通しの実践ガイド)
 │       ├── building-blocks/      docker.md / encryption.md / wallet.md
 │       └── agents/               plain-agent.md / teacher-agent.md
