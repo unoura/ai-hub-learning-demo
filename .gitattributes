@@ -1,0 +1,4 @@
+# コンテナ内の bash で実行するスクリプトは LF 固定(Windows で clone しても CRLF にしない)
+*.sh      text eol=lf
+iris.script text eol=lf
+merge.cpf text eol=lf

@@ -5,7 +5,7 @@
 
 ## 前提
 
-- Docker が動作していること。
+- Docker が動作していること(Windows は WSL2 前提。Docker Desktop の WSL2 バックエンドを使い、WSL2 のシェルでリポジトリを clone・実行する)。
 - ベースイメージ(iris-community AI Hub EAP)がローカルに `docker load` 済みであること
   (入手とロードの手順は [README の事前準備](../../../README.md#事前準備iris-イメージのロード))。
   イメージ名が異なる場合は `Dockerfile` の `ARG IMAGE` を書き換えます。

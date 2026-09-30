@@ -13,6 +13,9 @@
 **ビルド 136**(`2026.3.0AI.136.0`)で動作を確認しています。EAP はリリース前のため、ビルドによって動作が変わる可能性があります。
 
 1. Docker と Docker Compose V2(`docker compose version` が `v2.x`)を用意します。
+   **Windows の場合は WSL2 が前提です**: Docker Desktop(WSL2 バックエンド)を使い、以降のコマンドは
+   WSL2 のシェル(Ubuntu など)で実行します。リポジトリも WSL2 側で `git clone` してください
+   (Windows 側(`C:\…`)に置くと、改行コードの変換でスクリプトが動かないことがあり、バインドマウントも遅くなります)。
 2. [コミュニティエディションのダウンロードページ](https://evaluation.intersystems.com/Eval/index.html)で
    **Early Access Program** を選び、**AI Hub** のコンテナイメージをダウンロードします(アカウント登録が必要です。
    手順は「[コミュニティエディションのダウンロード方法](https://jp.community.intersystems.com/node/530121)」を参照)。
