@@ -3,14 +3,37 @@
 「**ハーネスエンジニアリング(Harness Engineering)**」と「**InterSystems AI Hub**」を紹介する記事のためのデモリポジトリです。
 軽量な IRIS を Docker で動かし、AI Hub で作った 2 つのエージェントを用意しています。
 
-- **プレインエージェント** — ツールを持たず、LLM と会話するだけの最小構成。
-- **先生エージェント** — 社内規程の研修を題材に、ツール(規程検索・採点・作問など)を持ち、
+- **先生エージェント** — 社内セキュリティ規程の研修を題材に、ツール(規程検索・採点・作問など)を持ち、
   呼び出す人の権限(IRIS の RBAC)で見えるツール・取れる行動が変わる。永続監査や人間の承認も備える。
+- **プレインエージェント** — ツールを持たず、LLM と会話するだけの最小構成。
+
+## 事前準備(IRIS イメージのロード)
+
+このデモは AI Hub の早期アクセスプログラム(EAP)版 IRIS コミュニティエディションのコンテナイメージを使います。
+**ビルド 136**(`2026.3.0AI.136.0`)で動作を確認しています。EAP はリリース前のため、ビルドによって動作が変わる可能性があります。
+
+1. Docker と Docker Compose V2(`docker compose version` が `v2.x`)を用意します。
+2. [コミュニティエディションのダウンロードページ](https://evaluation.intersystems.com/Eval/index.html)で
+   **Early Access Program** を選び、**AI Hub** のコンテナイメージをダウンロードします(アカウント登録が必要です。
+   手順は「[コミュニティエディションのダウンロード方法](https://jp.community.intersystems.com/node/530121)」を参照)。
+   arm64(Apple シリコンなど)の場合は `iris_arm64-community-…-docker.tar.gz` を選びます。
+3. ダウンロードしたファイルを Docker にロードします(ファイル名はダウンロードしたものに置き換えます)。
+
+   ```bash
+   docker load -i iris-community-2026.3.0AI.136.0-docker.tar.gz
+   docker images | grep iris-community   # ロードされたイメージ名:タグを確認
+   ```
+
+4. ロードされたイメージ名:タグが次と異なる場合(入手時期や arm64 版では異なることがあります)は、
+   [Dockerfile](Dockerfile) の `ARG IMAGE` を書き換えます。
+
+   ```
+   docker.iscinternal.com/docker-intersystems/intersystems/iris-community:2026.3.0AI.136.0
+   ```
 
 ## クイックスタート
 
-先生エージェントと対話するところまでの最短手順です。各手順の説明は
-[docs/guide/demo-runbook.md](docs/guide/demo-runbook.md) を参照してください。
+先生エージェントと対話するところまでの最短手順です。
 
 ```bash
 # 1. ビルド & 起動。初回起動で IRISSECURITY の暗号化まで自動で行われる(数分)
@@ -41,7 +64,11 @@ DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("student01")
 ```
 
 設問管理者として作問を試すときは、セッションを開き直して `TalkAs("qadmin01")` を実行します。
-環境の詳細は [docs/guide/building-blocks/docker.md](docs/guide/building-blocks/docker.md) を参照。
+
+各手順の説明は
+[docs/guide/demo-runbook.md](docs/guide/demo-runbook.md) を参照してください。
+
+環境の詳細は [docs/guide/building-blocks/docker.md](docs/guide/building-blocks/docker.md) を参照してください。
 
 ## アクセス制御と Human-in-the-loop
 
@@ -60,6 +87,7 @@ DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("student01")
 LLM の API キーは IRIS の **Secure Wallet** に格納し、エージェントからは ConfigStore の参照だけで扱います。
 Wallet の実体は `IRISSECURITY` データベースにあり、このデータベースを暗号化しておくことで、
 API キーは**保存時(at-rest)にも暗号化**されます。ソースや設定ファイルに平文のキーは残りません。
+
 
 ## ドキュメント構成
 
@@ -130,3 +158,16 @@ API キーは**保存時(at-rest)にも暗号化**されます。ソースや設
 - LLM プロバイダ: このデモは OpenAI / Anthropic(Claude)/ Amazon Bedrock に対応。
   AI Hub 自体はほかにも Gemini / Vertex AI・xAI・DeepSeek などに対応し、Ollama などのローカル LLM も
   OpenAI 互換 API で利用できます([ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Guide.md))
+
+## まとめ - InterSystems IRIS AI Hub の特徴
+
+このデモを通じて、以下を実感いただたら幸いです。
+
+- **データとエージェントが近い** — エージェントとツールは IRIS の中で動き、SQL・オブジェクト・ベクトル検索に
+  ネットワークを介さずアクセスします。ツール実行は高速です。
+  ただしLLM の推論は使うモデル・プロバイダに依存します。
+- **既存のロール・権限をそのまま使える** — ツールの可視性・実行可否を IRIS のユーザ / ロール / リソースで制御します。
+  同じ ID が SQL の権限と監査記録にも通るので、AI 用に別の権限体系を作る必要がありません。
+- **秘密情報と記録もプラットフォーム内** — API キーは Wallet(暗号化された IRISSECURITY)に置き、
+  ツール実行・承認の記録は同じ DB に残るので、後から SQL で照会できます。
+

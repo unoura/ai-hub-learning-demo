@@ -6,7 +6,8 @@
 ## 前提
 
 - Docker が動作していること。
-- ベースイメージ(iris-community AI Hub EAP)がローカルに `docker load` 済みであること。
+- ベースイメージ(iris-community AI Hub EAP)がローカルに `docker load` 済みであること
+  (入手とロードの手順は [README の事前準備](../../../README.md#事前準備iris-イメージのロード))。
   イメージ名が異なる場合は `Dockerfile` の `ARG IMAGE` を書き換えます。
 
 ## 起動
