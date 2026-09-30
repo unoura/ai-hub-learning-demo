@@ -13,8 +13,9 @@
 ## 起動
 
 ```bash
-# (任意)API キーを使う場合のみ。この構成要素では未設定でも起動できます
-cp .env.example .env   # 値を編集
+# (任意)ホスト側ポートを変える場合のみ。未作成でも既定ポートで起動できます
+# (API キーは .env に書きません。Wallet 構成要素で register-key.sh を使って登録します)
+cp .env.example .env   # HOST_SUPERSERVER_PORT / HOST_WEB_PORT を編集
 
 # ビルド & 起動
 docker compose up -d --build
