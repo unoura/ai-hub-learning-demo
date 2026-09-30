@@ -37,6 +37,49 @@
 | プレインエージェント(会話するだけの最小構成) | [guide](docs/guide/agents/plain-agent.md) | [design](docs/design/agents/plain-agent.md) |
 | 先生エージェント(権限で振る舞いが変わる発展形) | [guide](docs/guide/agents/teacher-agent.md) | [design](docs/design/agents/teacher-agent.md) |
 
+## リポジトリ構成
+
+```
+.
+├── README.md                     この文書(入口)
+├── Dockerfile                    IRIS(AI Hub EAP)イメージのビルド。ビルド時に merge.cpf と iris.script を適用
+├── docker-compose.yml            コンテナ定義(ポート・ソースのマウント・Durable %SYS ボリューム)
+├── merge.cpf                     CPF マージ: DEMO 名前空間(DEMO_DATA / DEMO_CODE)の作成
+├── iris.script                   ビルド時の初期設定(パスワード無期限化・ZPM 導入など)
+├── requirements.txt              Embedded Python 用パッケージ(MCP 関連)
+├── .env.example                  .env のサンプル(ホスト側ポート。API キーは書かない)
+├── .iris-agentic-dev.toml.example  iris-agentic-dev(IRIS 操作用 CLI / MCP)の接続設定サンプル
+├── .vscode/settings.json         VS Code の ObjectScript 拡張をコンテナへ接続する設定
+├── docker/
+│   ├── start.sh                  エントリーポイント: IRIS 起動を待って初回初期化・ソースのロード
+│   ├── first-boot-encrypt.sh     初回起動時だけ IRISSECURITY を暗号化(構成要素: 暗号化)
+│   └── register-key.sh           LLM の API キーを Wallet + ConfigStore に手動登録(構成要素: Wallet)
+├── src/Demo/
+│   ├── Agent/
+│   │   ├── Base.cls              共通ベースエージェント(ConfigStore から LLM プロバイダを自動採用)
+│   │   └── Plain.cls             プレインエージェント(ツールなし・会話だけ)
+│   └── Teacher/                  先生エージェント(クラスの役割は agents/teacher-agent.md の表を参照)
+│       ├── Teacher.cls           エージェント本体(対話モード・trajectory 表示)
+│       ├── ToolSet.cls           ツールセット(RoleGuard と監査ポリシーを付与)
+│       ├── Tools/                ツール: Catalog(設問一覧)/ Study(採点・成績表)/ Authoring(作問)
+│       ├── RoleGuard.cls         権限ゲート(RBAC)+ 人手承認ゲート
+│       ├── Security.cls          デモ用のリソース・ロール・ユーザを作成
+│       ├── RunAs.cls             別ユーザの権限での実行・比較、監査ログの表示
+│       ├── Monitor.cls           trajectory の観測(反復数・トークン)
+│       ├── Setup.cls             教材データの投入とベクトル索引の構築
+│       ├── Policy.cls / Question.cls / AnswerKey.cls / Progress.cls
+│       │                         データ: 社内規程 / 設問 / 模範解答・採点基準 / 学習履歴
+│       └── Audit/                永続監査: PersistentAudit(監査ポリシー)/ ToolCallLog(事象)/ RunLog(ラン)
+├── docs/
+│   ├── guide/                    聴衆向けの手順と説明(demo-runbook.md = 通しの実践ガイド)
+│   │   ├── building-blocks/      docker.md / encryption.md / wallet.md
+│   │   └── agents/               plain-agent.md / teacher-agent.md
+│   └── design/                   設計・判断根拠(guide と同じ2層構成)
+└── local/                        ローカル専用(Git 管理外。README.md のみコミット)
+```
+
+`src/` 配下はコンテナ起動時に DEMO 名前空間へロード・コンパイルされます(`docker/start.sh`)。
+
 ## 技術スタックの前提
 
 - ベースイメージ: **iris-community**(AI Hub EAP、ライセンス不要・FHIR なしの軽量構成)
