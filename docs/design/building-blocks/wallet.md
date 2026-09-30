@@ -2,7 +2,7 @@
 
 ## ねらい
 
-OpenAI / Claude(Anthropic)の API キーを IRIS の **Secure Wallet** に格納し、アプリからは
+OpenAI / Claude(Anthropic)/ Amazon Bedrock の API キーを IRIS の **Secure Wallet** に格納し、アプリからは
 **ConfigStore の `secret://` 参照 → `@{config:...}`** だけで扱う。Wallet の実体は
 `IRISSECURITY` データベースの `^WALLET` グローバルのため、**暗号化構成要素で暗号化済み → キーは
 at-rest で保護される**。この依存関係(Wallet は暗号化された IRISSECURITY の上にしか成立しない)が本デモの土台になる。

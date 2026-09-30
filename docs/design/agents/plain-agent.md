@@ -8,8 +8,8 @@ API キーを **ConfigStore の名前参照だけ**で解決して、実際に L
 ここから権限で振る舞いが変わる先生エージェントへ発展させる土台になる。
 
 プロバイダは固定せず、**Wallet 構成要素で登録したもの(openai / anthropic / bedrock のどれでも)を
-起動時に自動採用**する。顧客ごとに使うプロバイダが異なる(OpenAI / Anthropic が多い)一方、
-デモ環境は Bedrock 経由の場合もある、という前提に合わせた。
+起動時に自動採用**する(AI Hub 自体はほかにも Gemini / Vertex AI・xAI・DeepSeek 等や、
+OpenAI 互換 API 経由の Ollama などに対応する。このデモは 3 つに絞った)。
 
 ## 採用した構成(実機で疎通確認済み)
 

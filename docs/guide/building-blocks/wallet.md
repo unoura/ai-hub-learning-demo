@@ -6,6 +6,11 @@ IRIS の **Secure Wallet** に格納し、アプリからは
 データベース(`^WALLET`)なので、暗号化構成要素で暗号化済みのため、キーは**保存時(at-rest)で暗号化**
 されて保存されます。ソースコードや設定に平文の API キーは一切残りません。
 
+> **対応プロバイダについて**: このデモが扱うのは openai / anthropic / bedrock の 3 つです。AI Hub 自体(`%AI.Provider`)は
+> ほかにも Google Gemini / Vertex AI、xAI、Meta Llama、NVIDIA NIM、DeepSeek、Kimi、OpenRouter、GLM / Z.ai などに対応し、
+> **Ollama** などのローカル LLM も OpenAI 互換 API(プロバイダ `"openai"` + `base_url`)で利用できます。
+> 対応状況は EAP のビルドで変わるため、最新は [ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/main/ObjectScript_SDK_Guide.md) を参照してください。
+>
 > Secure Wallet は IRIS 2025.3 で導入、2026.1(EM)で一般提供された機能です。
 > 設計・判断根拠(なぜこの構成か、本番運用との違い)は
 > [../../design/building-blocks/wallet.md](../../design/building-blocks/wallet.md) を参照。

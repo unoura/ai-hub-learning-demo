@@ -11,7 +11,7 @@
 
 1. [building-blocks/docker.md](building-blocks/docker.md) — Docker で動作する IRIS 環境を作る
 2. [building-blocks/encryption.md](building-blocks/encryption.md) — IRISSECURITY を暗号化する
-3. [building-blocks/wallet.md](building-blocks/wallet.md) — Wallet で OpenAI / Claude のキーを受け渡す
+3. [building-blocks/wallet.md](building-blocks/wallet.md) — Wallet で OpenAI / Claude / Bedrock のキーを受け渡す
 
 ## エージェント(agents)
 

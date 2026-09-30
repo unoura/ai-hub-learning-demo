@@ -28,7 +28,7 @@
 |---|---|---|
 | Docker で動作する IRIS 環境 | [guide](docs/guide/building-blocks/docker.md) | [design](docs/design/building-blocks/docker.md) |
 | IRISSECURITY の暗号化 | [guide](docs/guide/building-blocks/encryption.md) | [design](docs/design/building-blocks/encryption.md) |
-| Wallet で OpenAI / Claude のキー受け渡し | [guide](docs/guide/building-blocks/wallet.md) | [design](docs/design/building-blocks/wallet.md) |
+| Wallet で OpenAI / Claude / Bedrock のキー受け渡し | [guide](docs/guide/building-blocks/wallet.md) | [design](docs/design/building-blocks/wallet.md) |
 
 **エージェント(agents)** — 上記の土台の上で動かす:
 
@@ -84,7 +84,9 @@
 
 - ベースイメージ: **iris-community**(AI Hub EAP、ライセンス不要・FHIR なしの軽量構成)
 - AI Hub SDK: `%AI.*`(`%AI.Tool` → `%AI.ToolSet` → `%AI.Agent` / `%AI.MCP.Service`)
-- LLM プロバイダ: OpenAI / Anthropic(Claude)の両対応
+- LLM プロバイダ: このデモは OpenAI / Anthropic(Claude)/ Amazon Bedrock に対応。
+  AI Hub 自体はほかにも Gemini / Vertex AI・xAI・DeepSeek などに対応し、Ollama などのローカル LLM も
+  OpenAI 互換 API で利用できます([ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/main/ObjectScript_SDK_Guide.md))
 
 ## クイックスタート
 
