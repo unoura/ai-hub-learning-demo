@@ -7,7 +7,7 @@
 ///   - Demo.Teacher.ToolSet … 採点・成績表(生徒)/ 作問(設問管理者)。<class>Demo.Teacher.RoleGuard</class>
 ///       が付与され、実行者のロール(IRIS の RBAC)に応じて見える・使えるツールが変わる。
 ///
-/// 権限差の実演は [[Demo.Teacher.RunAs]]、思考と行動の可視化は [[Demo.Teacher.Monitor]]。
+/// 権限差の実演は [[Demo.Teacher.RunAs]]、実行軌跡の可視化は [[Demo.Teacher.Monitor]]。
 /// 教材の投入・インデックス構築は [[Demo.Teacher.Setup]] を先に実行しておくこと。
 Class Demo.Teacher.Teacher Extends Demo.Agent.Base
 {
@@ -168,7 +168,7 @@ ClassMethod RunLessonWith(agent As Demo.Teacher.Teacher, goal As %String, maxIte
 
 /// 対話モード: session を1つ作り、入力ごとに Run(ツール呼び出し・権限ゲート・ベクトル検索)を回す。
 /// session が履歴を保持するので前のやり取りを踏まえた応答になる。通常は応答だけを返し、`/trace` と
-/// 入力したときに直前の応答の軌跡(思考と行動の連鎖)と集計を表示する(`/help` でコマンド一覧)。
+/// 入力したときに直前の応答の実行軌跡と集計を表示する(`/help` でコマンド一覧)。
 /// 実行者のロール(RBAC)で見える・使えるツールが変わる点は RunLesson と同じ。
 /// `quit`(または空行)で終了。日本語表示のため `-it` で入ったセッションで実行する。
 ///
@@ -220,7 +220,7 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
             Set goal = $ZStrip(goal, "<>W")
             // 他のコマンド(/trace・/help)に合わせて /quit・/exit でも終了できるようにする。
             If (goal="")||$ListFind($ListBuild("quit","exit","/quit","/exit"), $ZConvert(goal,"L")) { Quit }
-            // /trace: 直前の応答の軌跡(思考と行動の連鎖)と集計を表示する。
+            // /trace: 直前の応答の実行軌跡と集計を表示する。
             If $ZConvert(goal,"L")="/trace" {
                 If lastFrom<0 {
                     Write gray, "  (まだ表示できる軌跡がありません。先に質問してください。)", clr, !
