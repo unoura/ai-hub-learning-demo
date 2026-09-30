@@ -1,18 +1,65 @@
 # AI Hub Learning Demo
 
 「**ハーネスエンジニアリング(Harness Engineering)**」と「**InterSystems AI Hub**」を紹介する記事のためのデモリポジトリです。
-軽量な IRIS を Docker で立ち上げ、セキュリティを段階的に強化してから AI エージェントを動かす、という流れを扱います。
+軽量な IRIS を Docker で動かし、AI Hub で作った 2 つのエージェントを用意しています。
 
-## 全体像
+- **プレインエージェント** — ツールを持たず、LLM と会話するだけの最小構成。
+- **先生エージェント** — 社内規程の研修を題材に、ツール(規程検索・採点・作問など)を持ち、
+  呼び出す人の権限(IRIS の RBAC)で見えるツール・取れる行動が変わる。永続監査や人間の承認も備える。
 
+## クイックスタート
+
+先生エージェントと対話するところまでの最短手順です。各手順の説明は
+[docs/guide/demo-runbook.md](docs/guide/demo-runbook.md) を参照してください。
+
+```bash
+# 1. ビルド & 起動。初回起動で IRISSECURITY の暗号化まで自動で行われる(数分)
+cp .env.example .env          # 任意(ホスト側ポートを変える場合)
+docker compose up -d --build
+docker compose logs -f iris | grep "\[demo\]"   # 「暗号化を確認しました(EncryptedDB=1)」まで待つ
+
+# 2. LLM の API キーを Wallet に登録(非表示入力)。openai / anthropic / bedrock のどれか1つ
+docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh openai
+
+# 3. 教材の投入・ベクトル索引の構築と、デモ用のロール/ユーザの作成
+docker compose exec -T iris iris session iris -U DEMO <<'OBJ'
+ do ##class(Demo.Teacher.Setup).Rebuild()
+ do ##class(Demo.Teacher.Security).SetupRBAC()
+ halt
+OBJ
+
+# 4. IRIS セッションに入る(日本語を表示するため -it)
+docker compose exec -it iris iris session iris -U DEMO
 ```
-構成要素(Docker → 暗号化 → Wallet)を土台に、プレインエージェント、そして先生エージェント
+
+```objectscript
+; 5. 生徒(student01)として先生エージェントと対話する。パスワードは demo
+DEMO> do ##class(Demo.Teacher.RunAs).TalkAs("student01")
+あなた(student01)> 情報持ち出しについて教えてください。
+あなた(student01)> /trace      ; 直前の応答の軌跡(ツール呼び出しなど)を表示
+あなた(student01)> /quit       ; 終了(IRIS セッションも閉じる)
 ```
 
-暗号化された IRISSECURITY の上に Wallet を載せることで、Wallet に格納する API キーが
-**保存時(at-rest)で保護**される、という一貫したストーリーになっています。
-この3つの構成要素を土台に、まずツールを持たないプレインエージェント、
-そこから権限で振る舞いが変わる先生エージェントへ発展させます。
+設問管理者として作問を試すときは、セッションを開き直して `TalkAs("qadmin01")` を実行します。
+環境の詳細は [docs/guide/building-blocks/docker.md](docs/guide/building-blocks/docker.md) を参照。
+
+## アクセス制御と Human-in-the-loop
+
+先生エージェントには、生徒(`student01`)と設問管理者(`qadmin01`)の 2 つの役割があります。
+
+- **アクセス制御** — 採点・成績表は生徒だけ、作問は設問管理者だけが使えます。判定はプロンプトではなく
+  IRIS の RBAC(リソース / ロール)で行い、権限の無いツールは LLM に渡すツール一覧から除外されます
+  (呼ばれても実行時に拒否)。採点基準のテーブルは生徒に SQL の権限を与えず、採点はサーバ側で行います。
+- **Human-in-the-loop** — 設問管理者が作った設問は、教材に登録する直前に人間が確認します。
+  承認 / 却下のほか、「もっと難しく」のような指示で差し戻すと、エージェントが作り直して再提案します。
+- **記録** — ツールの実行と、承認・権限拒否の判断は、実行ユーザ名とともに監査テーブルに残ります。
+  対話中は `/trace` で直前の応答の軌跡を確認できます。
+
+## API キーの保護
+
+LLM の API キーは IRIS の **Secure Wallet** に格納し、エージェントからは ConfigStore の参照だけで扱います。
+Wallet の実体は `IRISSECURITY` データベースにあり、このデータベースを暗号化しておくことで、
+API キーは**保存時(at-rest)にも暗号化**されます。ソースや設定ファイルに平文のキーは残りません。
 
 ## ドキュメント構成
 
@@ -87,13 +134,3 @@
 - LLM プロバイダ: このデモは OpenAI / Anthropic(Claude)/ Amazon Bedrock に対応。
   AI Hub 自体はほかにも Gemini / Vertex AI・xAI・DeepSeek などに対応し、Ollama などのローカル LLM も
   OpenAI 互換 API で利用できます([ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/main/ObjectScript_SDK_Guide.md))
-
-## クイックスタート
-
-```bash
-cp .env.example .env          # 任意(API キーを使う場合)
-docker compose up -d --build  # ビルド & 起動
-docker compose exec -it iris iris session iris -U DEMO
-```
-
-詳細は [docs/guide/building-blocks/docker.md](docs/guide/building-blocks/docker.md) を参照。
