@@ -9,7 +9,7 @@ IRIS の **Secure Wallet** に格納し、アプリからは
 > **対応プロバイダについて**: このデモが扱うのは openai / anthropic / bedrock の 3 つです。AI Hub 自体(`%AI.Provider`)は
 > ほかにも Google Gemini / Vertex AI、xAI、Meta Llama、NVIDIA NIM、DeepSeek、Kimi、OpenRouter、GLM / Z.ai などに対応し、
 > **Ollama** などのローカル LLM も OpenAI 互換 API(プロバイダ `"openai"` + `base_url`)で利用できます。
-> 対応状況は EAP のビルドで変わるため、最新は [ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/main/ObjectScript_SDK_Guide.md) を参照してください。
+> 対応状況は EAP のビルドで変わるため、最新は [ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Guide.md) を参照してください。
 >
 > Secure Wallet は IRIS 2025.3 で導入、2026.1(EM)で一般提供された機能です。
 

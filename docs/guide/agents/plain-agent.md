@@ -11,7 +11,7 @@ Wallet 構成要素で登録した API キーを **ConfigStore の名前参照�
 > **対応プロバイダについて**: このデモが扱うのは openai / anthropic / bedrock の 3 つです。AI Hub 自体(`%AI.Provider`)は
 > ほかにも Google Gemini / Vertex AI、xAI、Meta Llama、NVIDIA NIM、DeepSeek、Kimi、OpenRouter、GLM / Z.ai などに対応し、
 > **Ollama** などのローカル LLM も OpenAI 互換 API(プロバイダ `"openai"` + `base_url`)で利用できます。
-> 対応状況は EAP のビルドで変わるため、最新は [ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/main/ObjectScript_SDK_Guide.md) を参照してください。
+> 対応状況は EAP のビルドで変わるため、最新は [ai-hub-eap の SDK ガイド](https://github.com/intersystems-community/ai-hub-eap/blob/master/ObjectScript_SDK_Guide.md) を参照してください。
 > このデモで他のプロバイダを使うには、`register-key.sh` にそのプロバイダの登録を足し、`Base` の
 > `PROVIDERPRIORITY` に名前を加えます(Ollama なら `model_provider="openai"` + `base_url` の設定を登録)。
 
