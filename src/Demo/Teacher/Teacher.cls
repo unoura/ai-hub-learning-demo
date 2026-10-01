@@ -317,7 +317,8 @@ ClassMethod ShowTrajectory(session As %AI.Agent.Session, from As %Integer = 0, r
               gray, "   実行ユーザ: ", clr, green, run.Username, clr,
               gray, "   状態: ", clr, $Select(run.Status = "completed": green, 1: red), run.Status, clr, !
     }
-    Write gray, "  要求: ", clr, ..OneLine(goal, 60), !
+    // 要求は切り詰めずに全文を出す(改行・タブだけ空白に潰す)。
+    Write gray, "  要求: ", clr, ..OneLine(goal, $Length(goal)), !
     If $IsObject(run) {
         Write gray, "  反復: ", run.Iterations, "/", run.MaxIterations, "   所要: ", $FNumber(run.Seconds, "", 2), " 秒", clr, !
         If run.ErrorText '= "" Write red, "  エラー: ", ..OneLine(run.ErrorText, 70), clr, !
