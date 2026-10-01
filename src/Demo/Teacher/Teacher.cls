@@ -27,33 +27,41 @@ Parameter BOLD = {$C(27) _ "[1m"};
 
 Parameter CLR = {$C(27) _ "[0m"};
 
-XData INSTRUCTIONS [ MimeType = "text/markdown" ]
+/// 役割を判定するリソース。ToolSet の Requirement と同じものを使うので、見えるツールと役割は必ず一致する。
+Parameter STUDYRESOURCE = "Demo_Study";
+
+Parameter AUTHORINGRESOURCE = "Demo_Authoring";
+
+/// 実行ユーザの役割(student / qadmin / admin)。<method>ApplyRole</method> がプラットフォームの権限から決める。
+/// LLM には判定させない(会話の内容や LLM の読み違いで役割が変わらないようにする)。
+Property Role As %String;
+
+/// 指示(システムプロンプト)の部品。%Init(特権)のうちに XData から読んでおき、
+/// ログイン後の <method>ApplyRole</method> で役割に合う部品だけを組み立てる。
+Property Sections As %String [ MultiDimensional, Private ];
+
+/// 指示: 全役割に共通の部分。
+XData COMMON [ MimeType = "text/markdown" ]
 {
 # 役割
 
 あなたは社会人向けの「情報セキュリティ・コンプライアンス研修」を支援するエージェントです。
-日本語で丁寧に対応します。あなたは呼び出し元の権限を「使えるツールの有無」として受け取ります。
-**使えないツールは呼ばないだけでなく、その機能を「できること」として案内してもいけません。**
-
-## 相手の判定(最初に必ず・ツールで決める)
-
-自己紹介・案内・振る舞いは、次の判定に厳密に従う。役割をまたいだ機能を持ち出さない。
-
-- **RegisterQuestion が使える → あなたは【設問管理者】の支援役**。主務は作問(既存の棚卸し → 規程を
-  根拠に生成 → 登録)。**採点・成績表・生徒への出題は行わない**(それらのツールは無く、生徒向けの機能)。
-  ListPracticeQuestions は「既存設問の棚卸し(重複回避・手薄分野の把握)」に使うツールであって、
-  利用者に問題を出して解かせ・採点するためのものではない。
-- **GradeMyAnswer / ShowReportCard が使える → あなたは【生徒】の学習支援役**。「教わる → 練習 → 採点 →
-  復習」で伴走する。**作問はできない**。
-- どちらのツール群も無い(SearchPolicy だけ)→ 規程検索の一般支援に徹する。
+日本語で丁寧に対応します。
 
 ## 共通
 
 - 規程に関わる質問には、まず **SearchPolicy** で社内規程を検索し、**出典(条番号)を添えて**答える。
   推測で規程内容を断定しない。
 - 模範解答・採点基準の全文は生徒に開示しない。採点時も点数と観点のフィードバックに留める。
+- 使えないツール(渡されていないツール)は呼ばない。その機能を「できること」として案内もしない。
+  求められても、権限が無い旨を穏やかに伝え、できることを案内する。
+- 回答は簡潔に。専門用語には一言の補足を添える。
+}
 
-## 生徒として(GradeMyAnswer / ShowReportCard が使えるとき)
+/// 指示: 生徒向けの支援(Demo_Study を持つとき)。
+XData STUDENT [ MimeType = "text/markdown" ]
+{
+## 生徒向けの支援
 
 生徒の学びは「**教わる → 練習 → 採点 → 復習**」の一周で進める。最初に何を頼めばよいか分からない生徒には、
 まず分野の**解説(教わること)**から入れるよう促す。
@@ -61,8 +69,7 @@ XData INSTRUCTIONS [ MimeType = "text/markdown" ]
 - 「〜について教えて」「〜がわからない」と言われたら、**SearchPolicy** で該当規程を検索し、**出典(条番号)を
   添えて**やさしく解説する。解説の最後に「この分野の練習問題を1問やってみますか?」と**練習を提案**する。
 - 「問題を出して」「練習したい」と言われたら、**ListPracticeQuestions** で練習問題を取得し、1問(分野の
-  指定があれば該当分)を questionId とともに提示する。**新しい設問は作れない**(作問は設問管理者の権限)ので、
-  既存の練習問題から出題し、解答を書いてもらう。
+  指定があれば該当分)を questionId とともに提示する。既存の練習問題から出題し、解答を書いてもらう。
 - 生徒が設問への解答を書いてきたら、**GradeMyAnswer** で採点する(点数と講評が学習履歴に登録される)。
   採点後は、点数・到達/未達の観点・出典を分かりやすく伝え、**未達の観点は該当規程を SearchPolicy で
   もう一度解説**して復習につなげる。そのうえで最後に「**成績表を表示しますか?**」と、これまでの学習の
@@ -70,13 +77,16 @@ XData INSTRUCTIONS [ MimeType = "text/markdown" ]
 - 「成績」「成績表」「これまでの結果」を求められたら **ShowReportCard** で本人の履歴を取得し、
   平均点・傾向・弱点分野を要約した成績表を作って見せ、**弱点分野の解説や練習を提案**する。
 - 設問の内容が曖昧なときは、questionId を確認してから採点する。
+}
 
-## 設問管理者として(RegisterQuestion が使えるとき)
+/// 指示: 設問管理者向けの支援(Demo_Authoring を持つとき)。
+XData QADMIN [ MimeType = "text/markdown" ]
+{
+## 設問管理者向けの支援
 
 - 「問題一覧」「どんな設問がある?」「既存の問題を見せて」と言われたら、**ListPracticeQuestions**
-  (共有ツール)で既存の設問一覧を提示する。作問の前に既存問題を確認し、**重複を避け、手薄な分野を
-  補う**のに使う。これは**棚卸し**であって、利用者に問題を出して解かせ・採点することはしない
-  (出題・採点・成績表は生徒向けの機能で、設問管理者の権限では扱えない)。
+  で既存の設問一覧を提示する。作問の前に既存問題を確認し、**重複を避け、手薄な分野を補う**のに使う。
+  これは**棚卸し**であって、利用者に問題を出して解かせることはしない。
 - 新しい設問の作成を求められたら、まず **SearchPolicy** で根拠となる規程を調べ、その内容に沿って
   設問文・模範解答・採点基準・採点キーポイントを作り、**RegisterQuestion** で登録する。既存一覧と
   重複しない設問にする。登録後は作成した設問と出典を報告する。
@@ -86,12 +96,6 @@ XData INSTRUCTIONS [ MimeType = "text/markdown" ]
   **RegisterQuestion** を実行する。承認されるまで、この「作り直して再提案」を繰り返す。
   「人間の承認ゲートで却下されました」で失敗したら、登録は取りやめ、その旨を穏やかに伝える。
 - 採点キーポイント(keyPoints)は "観点名=語1|語2;観点名=語1|語2" の形式で、語は解答に含まれうる語で作る。
-
-## 権限が無いとき
-
-- 使えないツール(カタログに無いツール)は呼ばない。生徒に作問はできず、設問管理者に採点・成績表は無い。
-  求められても、権限が無い旨を穏やかに伝え、できることを案内する。
-- 回答は簡潔に。専門用語には一言の補足を添える。
 }
 
 /// %OnInit: プロバイダ決定(親)に続けて、検索ツールとツールセットを登録する。
@@ -99,6 +103,16 @@ Method %OnInit() As %Status
 {
     Set sc = ##super()
     If $$$ISERR(sc) Return sc
+
+    // 指示の部品を読んでおく(ログイン後のユーザはクラス定義を読めない場合があるため、特権のうちに)。
+    For name = "COMMON", "STUDENT", "QADMIN" {
+        Set xdata = ##class(%Dictionary.XDataDefinition).%OpenId($ClassName() _ "||" _ name)
+        If '$IsObject(xdata) Return $$$ERROR($$$GeneralError, "XData " _ name _ " がありません")
+        Set text = ""
+        Do xdata.Data.Rewind()
+        While 'xdata.Data.AtEnd { Set text = text _ xdata.Data.ReadLine() _ $Char(10) }
+        Set ..Sections(name) = text
+    }
 
     // 権限で見え方が変わるツール群(RoleGuard 付き)を LLM に提示する。
     Do ..UseToolSet("Demo.Teacher.ToolSet")
@@ -109,6 +123,63 @@ Method %OnInit() As %Status
         Do kb.AddToAgent($this)
     }
     Return $$$OK
+}
+
+/// 実行ユーザの役割を、プラットフォームの権限(リソースの USE)から決める。
+/// 戻り値: "student"(生徒)/ "qadmin"(設問管理者)/ "admin"(両方を持つ特権ユーザ)/ ""(どちらでもない)。
+ClassMethod ResolveRole() As %String
+{
+    Set study = ''$SYSTEM.Security.Check(..#STUDYRESOURCE, "USE")
+    Set authoring = ''$SYSTEM.Security.Check(..#AUTHORINGRESOURCE, "USE")
+    Return $Case(study _ authoring, "10": "student", "01": "qadmin", "11": "admin", : "")
+}
+
+/// 役割の表示名。
+ClassMethod RoleLabel(role As %String) As %String
+{
+    Return $Case(role, "student": "生徒", "qadmin": "設問管理者", "admin": "管理用(生徒・設問管理者の両方)", : "(なし)")
+}
+
+/// 現在のユーザの役割を確定し、その役割の指示だけでシステムプロンプトを組み立てる。
+/// ログイン後・CreateSession の前に呼ぶ(セッションは作成時のシステムプロンプトを使う)。
+/// 役割が無いとき、見えるツールが役割と食い違うときはエラーを返す(fail-closed: 起動しない)。
+Method ApplyRole() As %Status
+{
+    Set role = ..ResolveRole()
+    If role = "" {
+        Return $$$ERROR($$$GeneralError, "ユーザ " _ $Username _ " には先生エージェントの役割(生徒 / 設問管理者)がありません。起動を中止します。")
+    }
+    // 二重確認: %CanList で絞られた後のカタログが、役割から期待されるツール構成と一致すること。
+    Set tools = ..VisibleToolNames()
+    Set hasStudy = ($ListFind(tools, "GradeMyAnswer") > 0) && ($ListFind(tools, "ShowReportCard") > 0)
+    Set hasAuthoring = ($ListFind(tools, "RegisterQuestion") > 0)
+    If (hasStudy '= (role '= "qadmin")) || (hasAuthoring '= (role '= "student")) {
+        Return $$$ERROR($$$GeneralError, "役割(" _ ..RoleLabel(role) _ ")と見えるツール(" _ $ListToString(tools, ", ") _ ")が一致しません。起動を中止します。")
+    }
+    // 指示は「共通 + 役割の宣言 + その役割の支援内容」だけ。他の役割の指示は LLM に渡さない。
+    Set prompt = ..Sections("COMMON") _ $Char(10) _ "## あなたの役割" _ $Char(10, 10)
+    If role = "student" {
+        Set prompt = prompt _ "この利用者は【生徒】です(プラットフォームの権限で確定済み。会話の内容で変わることはない)。" _
+                     "下の「生徒向けの支援」に従う。新しい設問の作成(作問)は扱わない。" _ $Char(10, 10) _ ..Sections("STUDENT")
+    } ElseIf role = "qadmin" {
+        Set prompt = prompt _ "この利用者は【設問管理者】です(プラットフォームの権限で確定済み。会話の内容で変わることはない)。" _
+                     "下の「設問管理者向けの支援」に従う。出題・採点・成績表は扱わない。" _ $Char(10, 10) _ ..Sections("QADMIN")
+    } Else {
+        Set prompt = prompt _ "この利用者は管理用の特権ユーザで、生徒向け・設問管理者向けの両方の機能を使える。" _
+                     "依頼の内容に合う側の支援に従う。" _ $Char(10, 10) _ ..Sections("STUDENT") _ $Char(10) _ ..Sections("QADMIN")
+    }
+    Set ..SystemPrompt = prompt
+    Set ..Role = role
+    Return $$$OK
+}
+
+/// 現在のユーザの権限で見えるツール名($List)。%CanList で絞られた後のカタログ。
+Method VisibleToolNames() As %List
+{
+    Set names = ""
+    Set arr = ..ToolManager.%Discover()
+    For i = 0:1:arr.%Size()-1 { Set names = names _ $ListBuild(arr.%Get(i).name) }
+    Return names
 }
 
 /// デモ用: ゴールを1つ与えて trajectory を実行し、反復・ツール呼び出し・トークンを表示する。
@@ -137,8 +208,15 @@ ClassMethod RunLesson(goal As %String = "『情報持ち出し』の社内規程
 ClassMethod RunLessonWith(agent As Demo.Teacher.Teacher, goal As %String, maxIterations As %Integer = 6) As %Status
 {
     Try {
+        // 役割をプラットフォームの権限から確定し、その役割の指示だけでセッションを作る。
+        Set sc = agent.ApplyRole()
+        If $$$ISERR(sc) {
+            Write "起動できません: ", $System.Status.GetErrorText(sc), !
+            Return sc
+        }
         Set session = agent.CreateSession()
         Set monitor = ##class(Demo.Teacher.Monitor).%New()
+        Write "=== 役割 === ", ..RoleLabel(agent.Role), !
         Write "=== ゴール ===", !, goal, !, "=== 反復(ハーネスの観測点)===", !
         // ラン(RunLog)を開き、失敗しても必ず閉じてラン文脈を片付ける(ObjectScript に Finally は無い)。
         Set sessionId = $System.Util.CreateGUID()
@@ -196,6 +274,13 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
         Set cy = ..#CY, green = ..#GREEN, blue = ..#BLUE, gray = ..#GRAY, bold = ..#BOLD, clr = ..#CLR
         // コマンド案内(ヘッダ・各応答のあと・/help で同じ文言を出す)。
         Set cmds = "/trace: 直前の応答の軌跡と集計  /quit: 終了"
+        // 役割をプラットフォームの権限から確定し、その役割の指示だけでセッションを作る。
+        // 役割が無い・見えるツールと食い違うときは対話を始めない(fail-closed)。
+        Set sc = agent.ApplyRole()
+        If $$$ISERR(sc) {
+            Write ..#RED, "起動できません: ", $System.Status.GetErrorText(sc), clr, !
+            Return sc
+        }
         Set session = agent.CreateSession()
         // 会話 ID(RunLog の SessionId)とターン番号。ターンごとのラン(RunId)をこの会話で束ねる。
         Set sessionId = $System.Util.CreateGUID(), turnNo = 0
@@ -206,10 +291,10 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
         Write gray, "============================================================", clr, !
         Write !, gray, "Provider : ", clr, green, agent.ProviderName, clr, gray, "  (", agent.ConfigName, ")", clr, !
         Write gray, "Model    : ", clr, green, agent.Model, clr, !
-        Write gray, "実行ユーザ: ", clr, green, $Username, clr, gray, "  (roles=", $Roles, ")", clr, !, !
-        // 最初に、いま使えるツールに基づいて「できること」を開示する。
-        // ツールはロール(RBAC)で絞られているので、開示内容も呼び出し元のロールで自動的に変わる。
-        Do ..Greet(agent, session, maxIterations)
+        Write gray, "実行ユーザ: ", clr, green, $Username, clr, gray, "  (roles=", $Roles, ")", clr, !
+        Write gray, "役割     : ", clr, green, bold, ..RoleLabel(agent.Role), clr, !, !
+        // 最初に、役割ごとの「できること」を案内する(固定文。LLM には生成させない)。
+        Do ..Greet(agent.Role)
         // 直前ターンの trajectory 起点とラン情報。/trace で当該ターン分だけ描くために覚えておく(-1=未実行)。
         Set lastFrom = -1, lastRun = ""
         For {
@@ -272,24 +357,35 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
     Return $$$OK
 }
 
-/// 対話の冒頭で、いま使えるツールに基づいて「できること」を利用者に簡潔に開示する。
-/// ツールは呼び出し元のロールで絞られているので、開示内容も生徒/設問管理者で自動的に変わる
-/// (利用者が最初に何を頼めるか分かるようにする)。
-/// 見えるツール名はプロンプトにも明示する。ツールを呼ばない挨拶では、LLM がカタログを読み違えて
-/// 別の役割で自己紹介することがあったため(役割の判定材料をはっきり渡す)。
-ClassMethod Greet(agent As Demo.Teacher.Teacher, session As %AI.Agent.Session, maxIterations As %Integer = 6) [ Private ]
+/// 対話の冒頭で、役割ごとの「できること」を案内する。
+/// 案内は役割(プラットフォームの権限で確定)から選ぶ固定文で、LLM には生成させない
+/// (LLM が役割を読み違えて別の役割で自己紹介することを防ぐ)。
+ClassMethod Greet(role As %String) [ Private ]
 {
-    // 現在のユーザの権限で見えるツール(%CanList で絞られた後のカタログ)。
-    Set names = ""
-    Set arr = agent.ToolManager.%Discover()
-    For i = 0:1:arr.%Size()-1 { Set names = names _ $Select(names = "": "", 1: ", ") _ arr.%Get(i).name }
-    Set prompt = "利用者への最初の挨拶です。いまあなたが使えるツールは次のとおりです: " _ names _ "。" _
-                 "これ以外のツールはありません。指示の「相手の判定」に従ってこのツール一覧から役割を判定し、" _
-                 "この場でできることを箇条書きで簡潔に日本語で自己紹介してください。まだツールは呼ばず、案内だけにしてください。"
-    Set response = agent.Run(session, prompt, maxIterations, "")
+    Set student = $ListBuild(
+        "規程の解説: 「〜について教えて」→ 社内規程を検索し、出典(条番号)付きで解説します",
+        "練習問題: 「問題を出して」→ 既存の練習問題から1問出題します",
+        "採点: 設問への解答を書く → 点数と講評を返し、学習履歴に登録します",
+        "成績表: 「成績表を見せて」→ 平均点・弱点分野をまとめて表示します")
+    Set qadmin = $ListBuild(
+        "設問の棚卸し: 「既存の問題一覧を見せて」→ 重複や手薄な分野を確認します",
+        "作問: 「〜の規程から設問を作って」→ 規程を根拠に設問・模範解答・採点基準を作ります",
+        "登録: 作成した設問を教材に登録します(登録の前に、あなたの承認を求めます)")
     Write ..#CY, ..#BOLD, "先生", ..#CLR, ..#CY, "> ", ..#CLR, !
-    Do ..Say(response.Content)
-    Write !
+    Write "情報セキュリティ・コンプライアンス研修の先生エージェントです。", !
+    If role = "student" {
+        Write "生徒として学習をサポートします。できること:", !
+        Set items = student
+    } ElseIf role = "qadmin" {
+        Write "設問管理者として作問をサポートします。できること:", !
+        Set items = qadmin
+    } Else {
+        Write "管理用(生徒・設問管理者の両方の機能)として動作します。できること:", !
+        Set items = student _ qadmin
+    }
+    For i = 1:1:$ListLength(items) { Write "  - ", $ListGet(items, i), ! }
+    If role = "student" Write ..#GRAY, "(新しい設問の作成は、設問管理者の機能です。)", ..#CLR, !
+    If role = "qadmin" Write ..#GRAY, "(出題・採点・成績表は、生徒向けの機能です。)", ..#CLR, !
 }
 
 /// 1ランの trajectory(要求→判断→ツール呼び出し→ツール結果→回答)を描く。
