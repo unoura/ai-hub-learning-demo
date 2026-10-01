@@ -36,9 +36,13 @@ Parameter AUTHORINGRESOURCE = "Demo_Authoring";
 /// LLM には判定させない(会話の内容や LLM の読み違いで役割が変わらないようにする)。
 Property Role As %String;
 
-/// 指示(システムプロンプト)の部品。%Init(特権)のうちに XData から読んでおき、
+/// 指示(システムプロンプト)の部品。%Init(特権)のうちに XData COMMON / STUDENT / QADMIN から読んでおき、
 /// ログイン後の <method>ApplyRole</method> で役割に合う部品だけを組み立てる。
-Property Sections As %String [ MultiDimensional, Private ];
+Property PromptCOMMON As %String(MAXLEN = "") [ Private ];
+
+Property PromptSTUDENT As %String(MAXLEN = "") [ Private ];
+
+Property PromptQADMIN As %String(MAXLEN = "") [ Private ];
 
 /// 指示: 全役割に共通の部分。
 XData COMMON [ MimeType = "text/markdown" ]
@@ -111,7 +115,7 @@ Method %OnInit() As %Status
         Set text = ""
         Do xdata.Data.Rewind()
         While 'xdata.Data.AtEnd { Set text = text _ xdata.Data.ReadLine() _ $Char(10) }
-        Set ..Sections(name) = text
+        Set $Property($This, "Prompt" _ name) = text
     }
 
     // 権限で見え方が変わるツール群(RoleGuard 付き)を LLM に提示する。
@@ -157,16 +161,16 @@ Method ApplyRole() As %Status
         Return $$$ERROR($$$GeneralError, "役割(" _ ..RoleLabel(role) _ ")と見えるツール(" _ $ListToString(tools, ", ") _ ")が一致しません。起動を中止します。")
     }
     // 指示は「共通 + 役割の宣言 + その役割の支援内容」だけ。他の役割の指示は LLM に渡さない。
-    Set prompt = ..Sections("COMMON") _ $Char(10) _ "## あなたの役割" _ $Char(10, 10)
+    Set prompt = ..PromptCOMMON _ $Char(10) _ "## あなたの役割" _ $Char(10, 10)
     If role = "student" {
         Set prompt = prompt _ "この利用者は【生徒】です(プラットフォームの権限で確定済み。会話の内容で変わることはない)。" _
-                     "下の「生徒向けの支援」に従う。新しい設問の作成(作問)は扱わない。" _ $Char(10, 10) _ ..Sections("STUDENT")
+                     "下の「生徒向けの支援」に従う。新しい設問の作成(作問)は扱わない。" _ $Char(10, 10) _ ..PromptSTUDENT
     } ElseIf role = "qadmin" {
         Set prompt = prompt _ "この利用者は【設問管理者】です(プラットフォームの権限で確定済み。会話の内容で変わることはない)。" _
-                     "下の「設問管理者向けの支援」に従う。出題・採点・成績表は扱わない。" _ $Char(10, 10) _ ..Sections("QADMIN")
+                     "下の「設問管理者向けの支援」に従う。出題・採点・成績表は扱わない。" _ $Char(10, 10) _ ..PromptQADMIN
     } Else {
         Set prompt = prompt _ "この利用者は管理用の特権ユーザで、生徒向け・設問管理者向けの両方の機能を使える。" _
-                     "依頼の内容に合う側の支援に従う。" _ $Char(10, 10) _ ..Sections("STUDENT") _ $Char(10) _ ..Sections("QADMIN")
+                     "依頼の内容に合う側の支援に従う。" _ $Char(10, 10) _ ..PromptSTUDENT _ $Char(10) _ ..PromptQADMIN
     }
     Set ..SystemPrompt = prompt
     Set ..Role = role
