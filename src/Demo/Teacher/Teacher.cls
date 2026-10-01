@@ -275,9 +275,17 @@ ClassMethod TalkWith(agent As Demo.Teacher.Teacher, maxIterations As %Integer = 
 /// 対話の冒頭で、いま使えるツールに基づいて「できること」を利用者に簡潔に開示する。
 /// ツールは呼び出し元のロールで絞られているので、開示内容も生徒/設問管理者で自動的に変わる
 /// (利用者が最初に何を頼めるか分かるようにする)。
+/// 見えるツール名はプロンプトにも明示する。ツールを呼ばない挨拶では、LLM がカタログを読み違えて
+/// 別の役割で自己紹介することがあったため(役割の判定材料をはっきり渡す)。
 ClassMethod Greet(agent As Demo.Teacher.Teacher, session As %AI.Agent.Session, maxIterations As %Integer = 6) [ Private ]
 {
-    Set prompt = "利用者への最初の挨拶です。いまあなたが使えるツールを踏まえ、この場でできることを箇条書きで簡潔に日本語で自己紹介してください。まだツールは呼ばず、案内だけにしてください。"
+    // 現在のユーザの権限で見えるツール(%CanList で絞られた後のカタログ)。
+    Set names = ""
+    Set arr = agent.ToolManager.%Discover()
+    For i = 0:1:arr.%Size()-1 { Set names = names _ $Select(names = "": "", 1: ", ") _ arr.%Get(i).name }
+    Set prompt = "利用者への最初の挨拶です。いまあなたが使えるツールは次のとおりです: " _ names _ "。" _
+                 "これ以外のツールはありません。指示の「相手の判定」に従ってこのツール一覧から役割を判定し、" _
+                 "この場でできることを箇条書きで簡潔に日本語で自己紹介してください。まだツールは呼ばず、案内だけにしてください。"
     Set response = agent.Run(session, prompt, maxIterations, "")
     Write ..#CY, ..#BOLD, "先生", ..#CLR, ..#CY, "> ", ..#CLR, !
     Do ..Say(response.Content)
