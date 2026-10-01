@@ -11,7 +11,10 @@
 ///
 /// SearchPolicy(ベクトル検索の KnowledgeBase)も要件なしでエージェントへ別途登録する
 /// (生徒・設問管理者どちらからも見える)。
-Class Demo.Teacher.ToolSet Extends %AI.ToolSet
+///
+/// DependsOn: ToolSet のジェネレータは Include するツールクラスのコンパイル済み情報を読むため、
+/// 初回(クラス未登録)の一括ロードでも先にツール・ポリシーをコンパイルさせる。
+Class Demo.Teacher.ToolSet Extends %AI.ToolSet [ DependsOn = (Demo.Teacher.Tools.Catalog, Demo.Teacher.Tools.Study, Demo.Teacher.Tools.Authoring, Demo.Teacher.RoleGuard, Demo.Teacher.Audit.PersistentAudit) ]
 {
 
 XData Definition [ MimeType = application/xml ]
