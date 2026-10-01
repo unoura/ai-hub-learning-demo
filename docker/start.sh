@@ -37,4 +37,8 @@ LOADSRC
 ) &
 
 echo "[demo] Starting IRIS..."
+# iris-main はカレントディレクトリに iris-main.log を作る。WORKDIR(/home/irisowner/dev)は
+# リポジトリのバインドマウントで、Linux / WSL2 ではホストのユーザ所有になり irisowner が書けないため、
+# irisowner のホームに移ってから起動する。
+cd /home/irisowner
 exec /tini -- /iris-main "$@"

@@ -26,7 +26,7 @@ encryption*.key
 .iris-agentic-dev.toml
 !.iris-agentic-dev.toml.example
 
-# IRIS 実行ログ(bind-mount でリポジトリ直下に生成される)
+# IRIS 実行ログ(現在はコンテナ内 /home/irisowner に出力。旧構成でリポジトリ直下に残ったもの)
 iris-main.log
 *.log
 
