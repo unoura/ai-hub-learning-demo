@@ -63,7 +63,7 @@ docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bed
 (**入力は画面に出ません**)。成功すると次のように出ます:
 
 ```
-[wallet] AISecrets.OpenAI / AI.LLM.openai 登録完了 (model=gpt-5.6, len=164)
+[wallet] AISecrets.OpenAI / AI.LLM.openai 登録完了 (model=gpt-5.6, reasoning_effort=none, len=164)
 ```
 
 - `-it`(TTY)必須です。非表示入力のために対話端末が要ります。
@@ -74,6 +74,10 @@ docker compose exec -it iris bash /home/irisowner/dev/docker/register-key.sh bed
   (既定 `us.anthropic.claude-sonnet-5` のように `us.` 等の接頭辞付き)を使う点に注意。
   素のモデル ID だと `on-demand throughput isn't supported` になることがあります。
   リージョン(既定 `us-east-1`)は秘密でないため ConfigStore に平文で入ります。
+- **OpenAI の gpt-5.x**: このモデルは Chat Completions API でツールを使うとき `reasoning_effort` を
+  `none` にする必要があります(付けないと `Function tools with reasoning_effort are not supported` で失敗)。
+  `register-key.sh` は gpt-5.1 以降のモデルを登録するとき、ConfigStore に
+  `"extra_params":{"reasoning_effort":"none"}` を入れ、エージェントはセッション作成時にこれを渡します。
 
 > API キーは `.env` にも環境変数にも書きません。`.env.example` にキー欄はありません。
 

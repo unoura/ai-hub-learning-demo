@@ -24,6 +24,10 @@ Property ProviderName As %String;
 /// 採用した ConfigStore の設定名(例: AI.LLM.bedrock)。表示用。
 Property ConfigName As %String;
 
+/// LLM リクエストに足す追加パラメータ(ConfigStore の extra_params)。セッション作成時に渡す。
+/// 例: OpenAI gpt-5.x でツールを使うための {"reasoning_effort":"none"}(register-key.sh が設定)。
+Property ExtraParams As %DynamicObject;
+
 /// `%Init()` の最後に呼ばれるフック。プロバイダ未設定なら ConfigStore から動的に選んで生成する。
 Method %OnInit() As %Status
 {
@@ -54,7 +58,18 @@ Method %OnInit() As %Status
 	Set ..Model = details.%Get("model")
 	Set ..ProviderName = details.%Get("model_provider")
 	Set ..ConfigName = "AI.LLM."_configName
+	Set:$IsObject(details.%Get("extra_params")) ..ExtraParams = details.%Get("extra_params")
 	Return $$$OK
+}
+
+/// ConfigStore の extra_params を、セッションの設定(LLM リクエストへの追加パラメータ)として渡す。
+Method CreateSession(config As %DynamicObject = "") As %AI.Agent.Session
+{
+	If $IsObject(..ExtraParams) {
+		Set:'$IsObject(config) config = {}
+		Do:'config.%IsDefined("extra_params") config.%Set("extra_params", ..ExtraParams)
+	}
+	Return ##super(config)
 }
 
 }

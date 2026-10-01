@@ -51,7 +51,15 @@ printf '%s' "$KEY" > "$tmp"
 unset KEY
 
 # 非シークレットのパラメータとファイルパスのみ環境変数で ObjectScript へ渡す(キー値は渡さない)。
-export DEMO_SID="AISecrets.${Name}" DEMO_CFG="${prov}" DEMO_PROV="${prov}" DEMO_MODEL="${model}" DEMO_KEYFILE="$tmp" DEMO_REGION="$region"
+# OpenAI の gpt-5.x(推論モデル)は、Chat Completions でツールを使うとき reasoning_effort=none が必要
+# (付けないと "Function tools with reasoning_effort are not supported" で失敗する)。リクエストへの追加パラメータ
+# (extra_params)として ConfigStore に保存し、エージェントがセッション作成時に渡す。
+reasoning=""
+if [ "$prov" = "openai" ]; then
+  case "$model" in gpt-5.[1-9]*) reasoning="none" ;; esac
+fi
+
+export DEMO_SID="AISecrets.${Name}" DEMO_CFG="${prov}" DEMO_PROV="${prov}" DEMO_MODEL="${model}" DEMO_KEYFILE="$tmp" DEMO_REGION="$region" DEMO_REASONING="$reasoning"
 
 iris session IRIS -U %SYS <<'OBJSCRIPT'
  set sid=$system.Util.GetEnviron("DEMO_SID"),cfg=$system.Util.GetEnviron("DEMO_CFG")
@@ -65,10 +73,12 @@ iris session IRIS -U %SYS <<'OBJSCRIPT'
  if 'sc { write "[wallet] Wallet 格納失敗: ",$system.Status.GetErrorText(sc),! halt }
  set cfgObj={"model_provider":(prov),"model":(model),"api_key":("secret://"_sid_"#key")}
  do:region'="" cfgObj.%Set("region",region)  // 非機密。bedrock のみ設定。
+ set reasoning=$system.Util.GetEnviron("DEMO_REASONING")
+ do:reasoning'="" cfgObj.%Set("extra_params",{"reasoning_effort":(reasoning)})  // 非機密。openai gpt-5.x のみ。
  do:##class(%ConfigStore.Configuration).Exists("AI.LLM."_cfg) ##class(%ConfigStore.Configuration).Delete("AI.LLM."_cfg)
  set sc=##class(%ConfigStore.Configuration).Create("AI","LLM","",cfg,cfgObj,"","","","",1,0)
  if 'sc { write "[wallet] ConfigStore 作成失敗: ",$system.Status.GetErrorText(sc),! halt }
- write "[wallet] ",sid," / AI.LLM.",cfg," 登録完了 (model=",model,$select(region'="":", region="_region,1:""),", len=",$length(k),")",!
+ write "[wallet] ",sid," / AI.LLM.",cfg," 登録完了 (model=",model,$select(region'="":", region="_region,1:""),$select(reasoning'="":", reasoning_effort="_reasoning,1:""),", len=",$length(k),")",!
  halt
 OBJSCRIPT
 rc=$?
