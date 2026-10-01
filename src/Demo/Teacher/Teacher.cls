@@ -378,10 +378,10 @@ ClassMethod Greet(role As %String) [ Private ]
     Write ..#CY, ..#BOLD, "先生", ..#CLR, ..#CY, "> ", ..#CLR, !
     Write "情報セキュリティ・コンプライアンス研修の先生エージェントです。", !
     If role = "student" {
-        Write "生徒として学習をサポートします。できること:", !
+        Write "生徒の学習をサポートします。できること:", !
         Set items = student
     } ElseIf role = "qadmin" {
-        Write "設問管理者として作問をサポートします。できること:", !
+        Write "設問管理者の作問をサポートします。できること:", !
         Set items = qadmin
     } Else {
         Write "管理用(生徒・設問管理者の両方の機能)として動作します。できること:", !
